@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  fecha       DateTime @default(now())
+  categoria   String
+  montoARS    Float
+  montoUSD    Float
+  tipo        String   // gasto | ingreso | inversion | ahorro
+  descripcion String?
+  cuenta      String   @default("Billetera")
+  etiquetas   String   @default("[]") // JSON array serializado
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Goal {
+  id                     String   @id @default(uuid())
+  nombre                 String
+  montoObjetivoUSD       Float
+  fechaTargetInicio      DateTime
+  fechaTargetFin         DateTime
+  ahorroActualUSD        Float    @default(0)
+  recomendacionInversion String?
+  estado                 String   @default("en_progreso") // en_progreso | alcanzada
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model Insight {
+  id        String   @id @default(uuid())
+  fecha     DateTime @default(now())
+  tipo      String   // alerta | oportunidad | recomendacion
+  categoria String
+  mensaje   String
+  impacto   String   // alto | medio | bajo
+  accion    String
+  leido     Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ExchangeRateCache {
+  id          String   @id @default("singleton")
+  rateBlue    Float
+  rateOficial Float
+  updatedAt   DateTime @updatedAt
+}
