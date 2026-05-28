@@ -165,6 +165,10 @@ function getScoreMessage(d: number, c: number, e: number, hasMetas: boolean): st
 }
 
 export async function chatWithAdvisor(userMessage: string): Promise<string> {
+  const key = process.env.CLAUDE_API_KEY;
+  if (!key || key === 'sk-ant-your-key-here') {
+    return 'El asesor IA no está configurado. Agregá tu CLAUDE_API_KEY para habilitar el chat con el asesor.';
+  }
   const client = getClient();
 
   const now = new Date();
