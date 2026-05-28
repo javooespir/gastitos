@@ -60,7 +60,7 @@ router.get('/summary/history', async (_req: Request, res: Response, next: NextFu
 
 router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const transaction = await updateTransaction(req.params.id, req.body);
+    const transaction = await updateTransaction(req.params['id'] as string, req.body);
     res.json(transaction);
   } catch (err) {
     next(err);
@@ -69,7 +69,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
 
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await deleteTransaction(req.params.id);
+    await deleteTransaction(req.params['id'] as string);
     res.status(204).send();
   } catch (err) {
     next(err);

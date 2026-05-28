@@ -42,7 +42,7 @@ router.post('/chat', async (req: Request, res: Response, next: NextFunction) => 
 
 router.patch('/insights/:id/read', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await markInsightRead(req.params.id);
+    await markInsightRead(req.params['id'] as string);
     res.json({ ok: true });
   } catch (err) {
     next(err);

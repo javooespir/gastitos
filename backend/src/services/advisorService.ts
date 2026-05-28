@@ -47,7 +47,7 @@ export async function generateAnalysis(): Promise<AdvisorAnalysis> {
   const prevMonths = history.slice(0, 5);
   const avgByCategory: Record<string, number> = {};
   for (const month of prevMonths) {
-    for (const [cat, sum] of Object.entries(month.categorySums)) {
+    for (const [cat, sum] of Object.entries(month.categorySums) as [string, number][]) {
       avgByCategory[cat] = (avgByCategory[cat] ?? 0) + sum;
     }
   }
