@@ -30,9 +30,12 @@ app.use('/api', metaRouter);
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`🚀 Backend corriendo en http://localhost:${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/api/health`);
-});
+// Only start HTTP server when running directly (not in Vercel serverless)
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Backend corriendo en http://localhost:${PORT}`);
+    console.log(`   Health: http://localhost:${PORT}/api/health`);
+  });
+}
 
 export default app;
