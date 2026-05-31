@@ -21,13 +21,30 @@ export interface TransactionInput {
   etiquetas?: string[];
 }
 
+export interface GoalAllocation {
+  id: string;
+  transactionId: string;
+  goalId: string;
+  montoUSD: number;
+  createdAt: string;
+  transaction?: {
+    fecha: string;
+    descripcion?: string;
+    tipo: string;
+    montoARS: number;
+  };
+}
+
 export interface Goal {
   id: string;
   nombre: string;
   montoObjetivoUSD: number;
   fechaTargetInicio: string;
   fechaTargetFin: string;
-  ahorroActualUSD: number;
+  ahorroActualUSD: number;       // saldo inicial manual
+  ahorroTotalUSD: number;        // ahorroActualUSD + sum(allocations)
+  allocatedUSD: number;          // solo lo que viene de transacciones
+  allocations: GoalAllocation[];
   recomendacionInversion?: string;
   estado: 'en_progreso' | 'alcanzada';
   createdAt: string;

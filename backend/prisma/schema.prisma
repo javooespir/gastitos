@@ -9,30 +9,45 @@ datasource db {
 }
 
 model Transaction {
-  id          String   @id @default(uuid())
-  fecha       DateTime @default(now())
-  categoria   String
-  montoARS    Float
-  montoUSD    Float
-  tipo        String   // gasto | ingreso | inversion | ahorro
-  descripcion String?
-  cuenta      String   @default("Billetera")
-  etiquetas   String   @default("[]") // JSON array serializado
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String           @id @default(uuid())
+  fecha           DateTime         @default(now())
+  categoria       String
+  montoARS        Float
+  montoUSD        Float
+  tipo            String           // gasto | ingreso | inversion | ahorro
+  descripcion     String?
+  cuenta          String           @default("Billetera")
+  etiquetas       String           @default("[]") // JSON array serializado
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  goalAllocations GoalAllocation[]
 }
 
 model Goal {
-  id                     String   @id @default(uuid())
+  id                     String           @id @default(uuid())
   nombre                 String
   montoObjetivoUSD       Float
   fechaTargetInicio      DateTime
   fechaTargetFin         DateTime
-  ahorroActualUSD        Float    @default(0)
+  ahorroActualUSD        Float            @default(0) // saldo inicial manual
   recomendacionInversion String?
-  estado                 String   @default("en_progreso") // en_progreso | alcanzada
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  estado                 String           @default("en_progreso") // en_progreso | alcanzada
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  allocations            GoalAllocation[]
+}
+
+model GoalAllocation {
+  id            String      @id @default(uuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  goalId        String
+  goal          Goal        @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  montoUSD      Float
+  createdAt     DateTime    @default(now())
+
+  @@index([transactionId])
+  @@index([goalId])
 }
 
 model Insight {

@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import prisma from '../lib/prisma';
 import {
   createTransaction,
   listTransactions,
@@ -12,7 +13,23 @@ const router = Router();
 
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const transaction = await createTransaction(req.body);
+    const { allocations, ...txData } = req.body;
+    const transaction = await createTransaction(txData);
+
+    // Create goal allocations if provided
+    if (allocations && Array.isArray(allocations) && allocations.length > 0) {
+      const validAllocs = allocations.filter((a: any) => a.goalId && Number(a.montoUSD) > 0);
+      if (validAllocs.length > 0) {
+        await prisma.goalAllocation.createMany({
+          data: validAllocs.map((a: any) => ({
+            transactionId: transaction.id,
+            goalId: a.goalId,
+            montoUSD: Number(a.montoUSD)
+          }))
+        });
+      }
+    }
+
     res.status(201).json(transaction);
   } catch (err) {
     next(err);

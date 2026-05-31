@@ -21,7 +21,8 @@ export const goalsApi = {
   list: () => api.get('/goals'),
   create: (data: any) => api.post('/goals', data),
   update: (id: string, data: any) => api.put(`/goals/${id}`, data),
-  remove: (id: string) => api.delete(`/goals/${id}`)
+  remove: (id: string) => api.delete(`/goals/${id}`),
+  removeAllocation: (allocId: string) => api.delete(`/goals/allocations/${allocId}`)
 };
 
 // Advisor

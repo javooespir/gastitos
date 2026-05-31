@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Target, ChevronDown } from 'lucide-react';
 import { transactionsApi } from '../../api/client';
 import { TransactionInput, ALL_CATEGORIES, CATEGORIES, CUENTAS } from '../../types';
 import { useApp } from '../../context/AppContext';
@@ -9,8 +9,13 @@ interface Props {
   onSuccess: () => void;
 }
 
+interface AllocationRow {
+  goalId: string;
+  montoUSD: string;
+}
+
 export default function TransactionForm({ onClose, onSuccess }: Props) {
-  const { rates } = useApp();
+  const { rates, goals } = useApp();
   const today = new Date().toISOString().split('T')[0];
 
   const [form, setForm] = useState<TransactionInput>({
@@ -25,11 +30,15 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
   const [error, setError] = useState('');
   const [esSaldoPrevio, setEsSaldoPrevio] = useState(false);
   const [monedaAhorro, setMonedaAhorro] = useState<'ARS' | 'USD'>('ARS');
-  const [montoRaw, setMontoRaw] = useState<number>(0); // lo que el usuario tipea
+  const [montoRaw, setMontoRaw] = useState<number>(0);
+  const [allocations, setAllocations] = useState<AllocationRow[]>([]);
+  const [showAllocations, setShowAllocations] = useState(false);
 
   const isAhorroUSD = form.tipo === 'ahorro' && monedaAhorro === 'USD';
+  const canAllocate = form.tipo === 'ahorro' || form.tipo === 'inversion';
+  const activeGoals = goals.filter(g => g.estado === 'en_progreso');
 
-  // Conversión para mostrar y para enviar
+  // Conversión
   const rate = rates?.blue ?? 1;
   const montoUSDDisplay = isAhorroUSD
     ? montoRaw.toFixed(2)
@@ -38,20 +47,76 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
     ? rates && montoRaw > 0 ? (montoRaw * rate).toLocaleString('es-AR', { maximumFractionDigits: 0 }) : '—'
     : null;
 
+  // Total USD del monto ingresado (para comparar con allocations)
+  const totalMontoUSD = isAhorroUSD ? montoRaw : (montoRaw > 0 ? montoRaw / rate : 0);
+  const totalAllocated = allocations.reduce((sum, a) => sum + (Number(a.montoUSD) || 0), 0);
+  const remainingUSD = totalMontoUSD - totalAllocated;
+
   const availableCategories = form.tipo === 'ingreso' || form.tipo === 'ahorro'
     ? CATEGORIES.ingresos
     : [...CATEGORIES.gastos];
 
+  const handleTipoChange = (tipo: TransactionInput['tipo']) => {
+    const defaultCat = tipo === 'ingreso' ? 'Salario' : tipo === 'ahorro' ? 'Ahorro p/viajar' : 'Alimentación';
+    const cuenta = tipo === 'ahorro' ? 'Ahorro' : 'Billetera';
+    setEsSaldoPrevio(false);
+    setMonedaAhorro('ARS');
+    setMontoRaw(0);
+    setAllocations([]);
+    setShowAllocations(false);
+    setForm(f => ({ ...f, tipo, categoria: defaultCat, cuenta, montoARS: 0 }));
+  };
+
+  const addAllocation = () => {
+    const unusedGoal = activeGoals.find(g => !allocations.some(a => a.goalId === g.id));
+    setAllocations(prev => [...prev, {
+      goalId: unusedGoal?.id ?? activeGoals[0]?.id ?? '',
+      montoUSD: ''
+    }]);
+  };
+
+  const updateAllocation = (i: number, field: keyof AllocationRow, value: string) => {
+    setAllocations(prev => prev.map((a, idx) => idx === i ? { ...a, [field]: value } : a));
+  };
+
+  const removeAllocation = (i: number) => {
+    setAllocations(prev => prev.filter((_, idx) => idx !== i));
+  };
+
+  const distributeEvenly = () => {
+    if (allocations.length === 0 || totalMontoUSD <= 0) return;
+    const perGoal = (totalMontoUSD / allocations.length).toFixed(2);
+    setAllocations(prev => prev.map(a => ({ ...a, montoUSD: perGoal })));
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (montoRaw <= 0) { setError('El monto debe ser mayor a 0'); return; }
+
+    // Validate allocations
+    if (allocations.length > 0) {
+      const hasEmpty = allocations.some(a => !a.goalId || !Number(a.montoUSD));
+      if (hasEmpty) { setError('Completá todas las filas de asignación'); return; }
+      if (totalAllocated > totalMontoUSD + 0.01) {
+        setError(`Asignaste USD ${totalAllocated.toFixed(2)} pero el monto es USD ${totalMontoUSD.toFixed(2)}`);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
-      // Si el ahorro está en USD, convertir a ARS usando la cotización actual
       const montoARS = isAhorroUSD ? Math.round(montoRaw * rate) : montoRaw;
-      const payload = { ...form, montoARS };
+      const payload: any = { ...form, montoARS };
       if (esSaldoPrevio) payload.descripcion = `[Saldo previo] ${payload.descripcion || ''}`.trim();
       if (isAhorroUSD) payload.descripcion = `[USD ${montoRaw}] ${payload.descripcion || ''}`.trim();
+
+      // Attach allocations
+      if (allocations.length > 0) {
+        payload.allocations = allocations
+          .filter(a => a.goalId && Number(a.montoUSD) > 0)
+          .map(a => ({ goalId: a.goalId, montoUSD: Number(a.montoUSD) }));
+      }
+
       await transactionsApi.create(payload);
       onSuccess();
       onClose();
@@ -62,19 +127,10 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
     }
   };
 
-  const handleTipoChange = (tipo: TransactionInput['tipo']) => {
-    const defaultCat = tipo === 'ingreso' ? 'Salario' : tipo === 'ahorro' ? 'Ahorro p/viajar' : 'Alimentación';
-    const cuenta = tipo === 'ahorro' ? 'Ahorro' : 'Billetera';
-    setEsSaldoPrevio(false);
-    setMonedaAhorro('ARS');
-    setMontoRaw(0);
-    setForm(f => ({ ...f, tipo, categoria: defaultCat, cuenta, montoARS: 0 }));
-  };
-
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-surface-800 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between p-6 border-b border-white/5">
+      <div className="bg-surface-800 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-white/5 sticky top-0 bg-surface-800 z-10">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <Plus className="w-5 h-5 text-brand-400" />
             Nueva Transacción
@@ -124,7 +180,7 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
                     <button
                       key={m}
                       type="button"
-                      onClick={() => { setMonedaAhorro(m); setMontoRaw(0); }}
+                      onClick={() => { setMonedaAhorro(m); setMontoRaw(0); setAllocations([]); }}
                       className={`px-3 py-1 font-medium transition-all ${
                         monedaAhorro === m
                           ? 'bg-brand-500 text-white'
@@ -217,6 +273,104 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
                 <p className="text-xs text-slate-500">Dinero que ya tenías — no se descuenta de tus ingresos del mes</p>
               </div>
             </label>
+          )}
+
+          {/* Asignar a metas (ahorro e inversión) */}
+          {canAllocate && activeGoals.length > 0 && (
+            <div className="border border-white/5 rounded-xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowAllocations(v => !v)}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm text-slate-300 hover:bg-white/5 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-brand-400" />
+                  Asignar a metas
+                  {allocations.length > 0 && (
+                    <span className="bg-brand-500/20 text-brand-400 text-xs px-2 py-0.5 rounded-full">
+                      {allocations.length}
+                    </span>
+                  )}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${showAllocations ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showAllocations && (
+                <div className="px-4 pb-4 space-y-2 border-t border-white/5 pt-3">
+                  {allocations.length === 0 ? (
+                    <p className="text-xs text-slate-500">Seleccioná a qué meta va este ahorro</p>
+                  ) : (
+                    <>
+                      {allocations.map((alloc, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <select
+                            value={alloc.goalId}
+                            onChange={e => updateAllocation(i, 'goalId', e.target.value)}
+                            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-brand-500/50 appearance-none"
+                          >
+                            {activeGoals.map(g => (
+                              <option key={g.id} value={g.id} className="bg-surface-800">{g.nombre}</option>
+                            ))}
+                          </select>
+                          <div className="relative w-28">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-mono">U$D</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={alloc.montoUSD}
+                              onChange={e => updateAllocation(i, 'montoUSD', e.target.value)}
+                              className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-2 py-2 text-white text-sm font-mono focus:outline-none focus:border-brand-500/50"
+                              placeholder="0"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeAllocation(i)}
+                            className="text-slate-500 hover:text-red-400 transition-colors flex-shrink-0"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* Summary */}
+                      {totalMontoUSD > 0 && (
+                        <div className={`text-xs font-mono px-1 pt-1 ${remainingUSD < -0.01 ? 'text-red-400' : remainingUSD > 0.01 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          {remainingUSD < -0.01
+                            ? `⚠ Excedés por USD ${Math.abs(remainingUSD).toFixed(2)}`
+                            : remainingUSD > 0.01
+                            ? `Sin asignar: USD ${remainingUSD.toFixed(2)}`
+                            : '✓ Distribuido completamente'
+                          }
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={addAllocation}
+                      disabled={allocations.length >= activeGoals.length}
+                      className="flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 transition-colors disabled:opacity-40"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Añadir meta
+                    </button>
+                    {allocations.length > 1 && totalMontoUSD > 0 && (
+                      <button
+                        type="button"
+                        onClick={distributeEvenly}
+                        className="text-xs text-slate-400 hover:text-slate-300 transition-colors ml-auto"
+                      >
+                        Distribuir igual
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Descripción */}
