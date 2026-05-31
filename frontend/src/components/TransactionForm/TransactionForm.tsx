@@ -24,10 +24,19 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [esSaldoPrevio, setEsSaldoPrevio] = useState(false);
+  const [monedaAhorro, setMonedaAhorro] = useState<'ARS' | 'USD'>('ARS');
+  const [montoRaw, setMontoRaw] = useState<number>(0); // lo que el usuario tipea
 
-  const montoUSD = rates && form.montoARS > 0
-    ? (form.montoARS / rates.blue).toFixed(2)
-    : '—';
+  const isAhorroUSD = form.tipo === 'ahorro' && monedaAhorro === 'USD';
+
+  // Conversión para mostrar y para enviar
+  const rate = rates?.blue ?? 1;
+  const montoUSDDisplay = isAhorroUSD
+    ? montoRaw.toFixed(2)
+    : rates && montoRaw > 0 ? (montoRaw / rate).toFixed(2) : '—';
+  const montoARSDisplay = isAhorroUSD
+    ? rates && montoRaw > 0 ? (montoRaw * rate).toLocaleString('es-AR', { maximumFractionDigits: 0 }) : '—'
+    : null;
 
   const availableCategories = form.tipo === 'ingreso' || form.tipo === 'ahorro'
     ? CATEGORIES.ingresos
@@ -35,11 +44,14 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (form.montoARS <= 0) { setError('El monto debe ser mayor a 0'); return; }
+    if (montoRaw <= 0) { setError('El monto debe ser mayor a 0'); return; }
     setSaving(true);
     try {
-      const payload = { ...form };
+      // Si el ahorro está en USD, convertir a ARS usando la cotización actual
+      const montoARS = isAhorroUSD ? Math.round(montoRaw * rate) : montoRaw;
+      const payload = { ...form, montoARS };
       if (esSaldoPrevio) payload.descripcion = `[Saldo previo] ${payload.descripcion || ''}`.trim();
+      if (isAhorroUSD) payload.descripcion = `[USD ${montoRaw}] ${payload.descripcion || ''}`.trim();
       await transactionsApi.create(payload);
       onSuccess();
       onClose();
@@ -54,7 +66,9 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
     const defaultCat = tipo === 'ingreso' ? 'Salario' : tipo === 'ahorro' ? 'Ahorro p/viajar' : 'Alimentación';
     const cuenta = tipo === 'ahorro' ? 'Ahorro' : 'Billetera';
     setEsSaldoPrevio(false);
-    setForm(f => ({ ...f, tipo, categoria: defaultCat, cuenta }));
+    setMonedaAhorro('ARS');
+    setMontoRaw(0);
+    setForm(f => ({ ...f, tipo, categoria: defaultCat, cuenta, montoARS: 0 }));
   };
 
   return (
@@ -100,23 +114,50 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
 
           {/* Monto */}
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Monto ARS</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-medium text-slate-400">
+                Monto {isAhorroUSD ? 'USD' : 'ARS'}
+              </label>
+              {form.tipo === 'ahorro' && (
+                <div className="flex rounded-lg overflow-hidden border border-white/10 text-xs">
+                  {(['ARS', 'USD'] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => { setMonedaAhorro(m); setMontoRaw(0); }}
+                      className={`px-3 py-1 font-medium transition-all ${
+                        monedaAhorro === m
+                          ? 'bg-brand-500 text-white'
+                          : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-mono">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-mono">
+                {isAhorroUSD ? 'U$D' : '$'}
+              </span>
               <input
                 type="number"
                 min="0"
-                step="0.01"
-                value={form.montoARS || ''}
-                onChange={e => setForm(f => ({ ...f, montoARS: Number(e.target.value) }))}
-                className="w-full bg-white/5 border border-white/10 rounded-xl pl-8 pr-4 py-3 text-white font-mono focus:outline-none focus:border-brand-500/50 focus:bg-white/8"
+                step={isAhorroUSD ? '0.01' : '1'}
+                value={montoRaw || ''}
+                onChange={e => setMontoRaw(Number(e.target.value))}
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white font-mono focus:outline-none focus:border-brand-500/50 focus:bg-white/8"
                 placeholder="0"
                 required
               />
             </div>
-            {form.montoARS > 0 && (
+            {montoRaw > 0 && (
               <p className="text-xs text-slate-500 mt-1 font-mono">
-                ≈ USD {montoUSD} {rates ? `(Blue $${Math.round(rates.blue).toLocaleString('es-AR')})` : ''}
+                {isAhorroUSD
+                  ? `≈ ARS $${montoARSDisplay} (BBVA $${Math.round(rate).toLocaleString('es-AR')})`
+                  : `≈ USD ${montoUSDDisplay} (BBVA $${Math.round(rate).toLocaleString('es-AR')})`
+                }
               </p>
             )}
           </div>
