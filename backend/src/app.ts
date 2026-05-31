@@ -18,7 +18,15 @@ app.use(cors({ origin: [FRONTEND_URL, 'http://localhost:3000', 'http://localhost
 app.use(express.json());
 
 // Health check
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/api/health', (_req, res) => {
+  const dbUrl = process.env.DATABASE_URL || '';
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    db_set: !!dbUrl,
+    db_prefix: dbUrl.substring(0, 15) || 'EMPTY'
+  });
+});
 
 // Routes
 app.use('/api/transactions', transactionRoutes);
