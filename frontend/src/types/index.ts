@@ -118,7 +118,7 @@ export const CATEGORIES = {
 } as const;
 
 export const ALL_CATEGORIES = [...CATEGORIES.gastos, ...CATEGORIES.ingresos];
-export const CUENTAS = ['Banco', 'Billetera', 'Efectivo', 'Mercado Pago', 'Naranja X', 'Otro'];
+export const CUENTAS = ['Billetera', 'Ahorro'];
 
 export const CATEGORY_COLORS: Record<string, string> = {
   'Alimentación': '#f97316',

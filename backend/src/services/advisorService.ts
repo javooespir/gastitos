@@ -1,15 +1,37 @@
-import Anthropic from '@anthropic-ai/sdk';
 import prisma from '../lib/prisma';
 import { getMonthlySummary, getLast6MonthsSummary } from './transactionService';
 import { getExchangeRates } from './exchangeService';
 import { AdvisorAnalysis, Alert, Opportunity } from '../types';
 
-function getClient(): Anthropic {
-  const key = process.env.CLAUDE_API_KEY;
-  if (!key || key === 'sk-ant-your-key-here') {
-    throw new Error('CLAUDE_API_KEY no configurada. Edita backend/.env con tu clave real.');
+async function callGroq(systemPrompt: string, userMessage: string): Promise<string> {
+  const key = process.env.GROQ_API_KEY;
+  if (!key) throw new Error('GROQ_API_KEY no configurada');
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${key}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage }
+      ],
+      max_tokens: 1024,
+      temperature: 0.7
+    }),
+    signal: AbortSignal.timeout(15000)
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Groq API error ${res.status}: ${err}`);
   }
-  return new Anthropic({ apiKey: key });
+
+  const data = await res.json() as any;
+  return data.choices?.[0]?.message?.content ?? 'Sin respuesta del asesor.';
 }
 
 async function saveInsights(analysis: AdvisorAnalysis) {
@@ -165,11 +187,9 @@ function getScoreMessage(d: number, c: number, e: number, hasMetas: boolean): st
 }
 
 export async function chatWithAdvisor(userMessage: string): Promise<string> {
-  const key = process.env.CLAUDE_API_KEY;
-  if (!key || key === 'sk-ant-your-key-here') {
-    return 'El asesor IA no está configurado. Agregá tu CLAUDE_API_KEY para habilitar el chat con el asesor.';
+  if (!process.env.GROQ_API_KEY) {
+    return 'El asesor IA necesita una API key de Groq (gratis en console.groq.com). Configurala como GROQ_API_KEY en Vercel.';
   }
-  const client = getClient();
 
   const now = new Date();
   const [currentMonth, rates, goals] = await Promise.all([
@@ -178,30 +198,19 @@ export async function chatWithAdvisor(userMessage: string): Promise<string> {
     prisma.goal.findMany()
   ]);
 
-  const context = `
-Sos un asesor financiero personal experto en Argentina. El usuario se llama Javier y vive en Castelar, Buenos Aires.
+  const context = `Sos un asesor financiero personal experto en Argentina. El usuario se llama Javier y vive en Castelar, Buenos Aires.
 
-CONTEXTO FINANCIERO ACTUAL (${now.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}):
-- Dólar blue: $${rates.blue.toFixed(0)} ARS
-- Dólar oficial: $${rates.oficial.toFixed(0)} ARS
+CONTEXTO FINANCIERO (${now.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}):
+- USD BBVA venta: $${rates.blue.toFixed(0)} ARS
 - Gastos del mes: $${currentMonth.totalGastadoARS.toLocaleString('es-AR')} ARS (USD ${currentMonth.totalGastadoUSD.toFixed(0)})
 - Ingresos del mes: $${currentMonth.totalIngresadoARS.toLocaleString('es-AR')} ARS
 - Ahorro del mes: $${currentMonth.totalAhorradoARS.toLocaleString('es-AR')} ARS (USD ${currentMonth.totalAhorradoUSD.toFixed(0)})
-- Top categorías de gasto: ${Object.entries(currentMonth.categorySums).sort(([,a],[,b]) => b-a).slice(0,5).map(([c,s]) => `${c}: $${s.toLocaleString('es-AR')}`).join(', ')}
-- Metas activas: ${goals.map(g => `${g.nombre} (${g.ahorroActualUSD.toFixed(0)}/${g.montoObjetivoUSD} USD)`).join(', ') || 'Ninguna'}
+- Top gastos: ${Object.entries(currentMonth.categorySums).sort(([,a],[,b]) => (b as number)-(a as number)).slice(0,5).map(([c,s]) => `${c}: $${(s as number).toLocaleString('es-AR')}`).join(', ')}
+- Metas: ${goals.map(g => `${g.nombre} (${g.ahorroActualUSD.toFixed(0)}/${g.montoObjetivoUSD} USD)`).join(', ') || 'Ninguna'}
 
-Respondé en español argentino, de forma directa y práctica. Usá números reales del contexto. Máximo 3-4 oraciones a menos que el usuario pida más detalle.
-`.trim();
+Respondé en español argentino, directo y práctico. Usá los números reales del contexto. Máximo 3-4 oraciones salvo que pidan más detalle.`;
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    system: context,
-    messages: [{ role: 'user', content: userMessage }]
-  });
-
-  const block = response.content[0];
-  return block.type === 'text' ? block.text : 'No pude procesar tu consulta.';
+  return callGroq(context, userMessage);
 }
 
 export async function getRecentInsights(limit = 10) {

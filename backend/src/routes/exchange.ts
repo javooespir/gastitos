@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { getExchangeRates } from '../services/exchangeService';
+import { getExchangeRates, refreshRates } from '../services/exchangeService';
 import { ALL_CATEGORIES, CUENTAS } from '../types';
 
 const router = Router();
@@ -22,6 +22,16 @@ metaRouter.get('/categories', (_req: Request, res: Response) => {
 
 metaRouter.get('/accounts', (_req: Request, res: Response) => {
   res.json({ accounts: CUENTAS });
+});
+
+// Cron endpoint — llamado a las 11am Argentina (14:00 UTC) por Vercel
+router.post('/refresh', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rates = await refreshRates();
+    res.json({ ok: true, rates });
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

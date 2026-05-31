@@ -87,4 +87,4 @@ export const CATEGORIES = {
 
 export const ALL_CATEGORIES = [...CATEGORIES.gastos, ...CATEGORIES.ingresos];
 
-export const CUENTAS = ['Banco', 'Billetera', 'Efectivo', 'Mercado Pago', 'Naranja X', 'Otro'];
+export const CUENTAS = ['Billetera', 'Ahorro'];

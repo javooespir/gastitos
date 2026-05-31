@@ -15,5 +15,11 @@
     { "src": "/api/(.*)", "dest": "/api/index.ts" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/exchange-rate/refresh",
+      "schedule": "0 14 * * *"
+    }
   ]
 }

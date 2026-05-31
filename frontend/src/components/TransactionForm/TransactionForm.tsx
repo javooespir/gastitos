@@ -23,6 +23,7 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [esSaldoPrevio, setEsSaldoPrevio] = useState(false);
 
   const montoUSD = rates && form.montoARS > 0
     ? (form.montoARS / rates.blue).toFixed(2)
@@ -37,7 +38,9 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
     if (form.montoARS <= 0) { setError('El monto debe ser mayor a 0'); return; }
     setSaving(true);
     try {
-      await transactionsApi.create(form);
+      const payload = { ...form };
+      if (esSaldoPrevio) payload.descripcion = `[Saldo previo] ${payload.descripcion || ''}`.trim();
+      await transactionsApi.create(payload);
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -48,10 +51,10 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
   };
 
   const handleTipoChange = (tipo: TransactionInput['tipo']) => {
-    const defaultCat = tipo === 'ingreso' || tipo === 'ahorro'
-      ? 'Salario'
-      : 'Alimentación';
-    setForm(f => ({ ...f, tipo, categoria: defaultCat }));
+    const defaultCat = tipo === 'ingreso' ? 'Salario' : tipo === 'ahorro' ? 'Ahorro p/viajar' : 'Alimentación';
+    const cuenta = tipo === 'ahorro' ? 'Ahorro' : 'Billetera';
+    setEsSaldoPrevio(false);
+    setForm(f => ({ ...f, tipo, categoria: defaultCat, cuenta }));
   };
 
   return (
@@ -156,6 +159,24 @@ export default function TransactionForm({ onClose, onSuccess }: Props) {
               </select>
             </div>
           </div>
+
+          {/* Saldo previo (solo para ahorro) */}
+          {form.tipo === 'ahorro' && (
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div
+                onClick={() => setEsSaldoPrevio(v => !v)}
+                className={`w-5 h-5 rounded flex items-center justify-center border transition-all flex-shrink-0 ${
+                  esSaldoPrevio ? 'bg-blue-500 border-blue-500' : 'border-white/20 bg-white/5 group-hover:border-white/40'
+                }`}
+              >
+                {esSaldoPrevio && <span className="text-white text-xs font-bold">✓</span>}
+              </div>
+              <div onClick={() => setEsSaldoPrevio(v => !v)}>
+                <span className="text-sm text-slate-300">Es saldo previo</span>
+                <p className="text-xs text-slate-500">Dinero que ya tenías — no se descuenta de tus ingresos del mes</p>
+              </div>
+            </label>
+          )}
 
           {/* Descripción */}
           <div>
