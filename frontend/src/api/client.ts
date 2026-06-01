@@ -25,6 +25,38 @@ export const goalsApi = {
   removeAllocation: (allocId: string) => api.delete(`/goals/allocations/${allocId}`)
 };
 
+// Fixed Expenses
+export const fixedExpensesApi = {
+  list: () => api.get('/fixed-expenses'),
+  create: (data: any) => api.post('/fixed-expenses', data),
+  update: (id: string, data: any) => api.put(`/fixed-expenses/${id}`, data),
+  remove: (id: string) => api.delete(`/fixed-expenses/${id}`),
+  pagar: (id: string) => api.post(`/fixed-expenses/${id}/pagar`),
+  unpagar: (id: string) => api.post(`/fixed-expenses/${id}/unpagar`)
+};
+
+// Loans
+export const loansApi = {
+  list: () => api.get('/loans'),
+  create: (data: any) => api.post('/loans', data),
+  update: (id: string, data: any) => api.put(`/loans/${id}`, data),
+  registrarPago: (id: string, data: any) => api.post(`/loans/${id}/pagos`, data),
+  remove: (id: string) => api.delete(`/loans/${id}`)
+};
+
+// Credit Card
+export const creditCardApi = {
+  parsePdf: (file: File, banco: string) => {
+    const fd = new FormData();
+    fd.append('pdf', file);
+    fd.append('banco', banco);
+    return axios.post('/api/credit-card/parse', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000
+    });
+  }
+};
+
 // Advisor
 export const advisorApi = {
   insights: () => api.get('/advisor/insights'),

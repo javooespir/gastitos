@@ -1,15 +1,16 @@
 import { useState, useMemo } from 'react';
-import { Plus, Search, Trash2, Filter } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2 } from 'lucide-react';
 import Header from '../components/Layout/Header';
 import TransactionForm from '../components/TransactionForm/TransactionForm';
 import { useApp } from '../context/AppContext';
 import { transactionsApi } from '../api/client';
-import { ALL_CATEGORIES, CATEGORY_COLORS } from '../types';
+import { ALL_CATEGORIES, CATEGORY_COLORS, Transaction } from '../types';
 import { formatARS, formatUSD, formatDate } from '../utils/formatters';
 
 export default function Transactions() {
   const { transactions, refreshTransactions, refreshSummary } = useApp();
   const [showForm, setShowForm] = useState(false);
+  const [editingTx, setEditingTx] = useState<Transaction | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [filterTipo, setFilterTipo] = useState('');
   const [filterCat, setFilterCat] = useState('');
@@ -45,9 +46,19 @@ export default function Transactions() {
     }
   };
 
+  const handleEdit = (tx: Transaction) => {
+    setEditingTx(tx);
+    setShowForm(true);
+  };
+
   const handleSuccess = () => {
     refreshTransactions();
     refreshSummary();
+  };
+
+  const handleClose = () => {
+    setShowForm(false);
+    setEditingTx(undefined);
   };
 
   return (
@@ -71,11 +82,8 @@ export default function Transactions() {
             />
           </div>
 
-          <select
-            value={filterTipo}
-            onChange={e => setFilterTipo(e.target.value)}
-            className="bg-surface-850 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none appearance-none min-w-[130px]"
-          >
+          <select value={filterTipo} onChange={e => setFilterTipo(e.target.value)}
+            className="bg-surface-850 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none appearance-none min-w-[130px]">
             <option value="" className="bg-surface-800">Todos los tipos</option>
             <option value="gasto" className="bg-surface-800">Gastos</option>
             <option value="ingreso" className="bg-surface-800">Ingresos</option>
@@ -83,21 +91,16 @@ export default function Transactions() {
             <option value="inversion" className="bg-surface-800">Inversiones</option>
           </select>
 
-          <select
-            value={filterCat}
-            onChange={e => setFilterCat(e.target.value)}
-            className="bg-surface-850 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none appearance-none min-w-[160px]"
-          >
+          <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
+            className="bg-surface-850 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none appearance-none min-w-[160px]">
             <option value="" className="bg-surface-800">Todas las categorías</option>
             {ALL_CATEGORIES.map(c => (
               <option key={c} value={c} className="bg-surface-800">{c}</option>
             ))}
           </select>
 
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap"
-          >
+          <button onClick={() => { setEditingTx(undefined); setShowForm(true); }}
+            className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap">
             <Plus className="w-4 h-4" />
             Nueva
           </button>
@@ -128,16 +131,11 @@ export default function Transactions() {
                   </tr>
                 ) : (
                   filtered.map(t => (
-                    <tr key={t.id} className="hover:bg-white/2 transition-colors">
+                    <tr key={t.id} className="hover:bg-white/2 transition-colors group">
                       <td className="px-6 py-3">
                         <div className="flex items-center gap-2.5">
-                          <div
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
-                            style={{
-                              backgroundColor: `${CATEGORY_COLORS[t.categoria] ?? '#64748b'}20`,
-                              color: CATEGORY_COLORS[t.categoria] ?? '#94a3b8'
-                            }}
-                          >
+                          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
+                            style={{ backgroundColor: `${CATEGORY_COLORS[t.categoria] ?? '#64748b'}20`, color: CATEGORY_COLORS[t.categoria] ?? '#94a3b8' }}>
                             {t.categoria.slice(0, 2)}
                           </div>
                           <span className="text-white font-medium">{t.categoria}</span>
@@ -158,20 +156,22 @@ export default function Transactions() {
                         <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${
                           t.tipo === 'gasto' ? 'bg-red-500/10 text-red-400' :
                           t.tipo === 'ingreso' ? 'bg-emerald-500/10 text-emerald-400' :
-                          t.tipo === 'ahorro' ? 'bg-blue-500/10 text-blue-400' :
-                          'bg-purple-500/10 text-purple-400'
+                          t.tipo === 'ahorro' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'
                         }`}>
                           {t.tipo === 'inversion' ? 'Inversión' : t.tipo.charAt(0).toUpperCase() + t.tipo.slice(1)}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => handleDelete(t.id)}
-                          disabled={deleting === t.id}
-                          className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => handleEdit(t)}
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-brand-400 hover:bg-brand-500/10 transition-colors">
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(t.id)} disabled={deleting === t.id}
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -184,8 +184,9 @@ export default function Transactions() {
 
       {showForm && (
         <TransactionForm
-          onClose={() => setShowForm(false)}
+          onClose={handleClose}
           onSuccess={handleSuccess}
+          editTransaction={editingTx}
         />
       )}
     </>

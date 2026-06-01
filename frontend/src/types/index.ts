@@ -137,6 +137,45 @@ export const CATEGORIES = {
 export const ALL_CATEGORIES = [...CATEGORIES.gastos, ...CATEGORIES.ingresos];
 export const CUENTAS = ['Billetera', 'Ahorro'];
 
+export interface FixedExpense {
+  id: string;
+  nombre: string;
+  monto: number;
+  categoria: string;
+  diaMes: number;
+  activo: boolean;
+  pagadoEsteMes: boolean;
+  ultimoPago?: string;
+  createdAt: string;
+}
+
+export interface LoanPayment {
+  id: string;
+  loanId: string;
+  numeroCuota: number;
+  montoPagado: number;
+  fecha: string;
+  createdAt: string;
+}
+
+export interface Loan {
+  id: string;
+  nombre: string;
+  tipo: string;
+  saldoActual: number;
+  tasaAnual: number;
+  esUVA: boolean;
+  totalCuotas: number;
+  cuotaPagada: number;
+  montoCuotaActual: number;
+  montoCuotaOriginal: number;
+  fechaPrimeraCuota: string;
+  diaPago: number;
+  estado: 'activo' | 'cancelado';
+  createdAt: string;
+  pagos: LoanPayment[];
+}
+
 export const CATEGORY_COLORS: Record<string, string> = {
   'Alimentación': '#f97316',
   'Casa': '#8b5cf6',

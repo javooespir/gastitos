@@ -1,19 +1,24 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, ArrowLeftRight, Target, Brain, TrendingUp, Wallet
+  LayoutDashboard, ArrowLeftRight, Target, Brain, TrendingUp, Wallet,
+  CalendarClock, CreditCard, Landmark
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/transactions', label: 'Transacciones', icon: ArrowLeftRight },
+  { to: '/fixed-expenses', label: 'Gastos Fijos', icon: CalendarClock },
   { to: '/goals', label: 'Metas', icon: Target },
+  { to: '/loans', label: 'Créditos', icon: Landmark },
+  { to: '/credit-card', label: 'Tarjeta', icon: CreditCard },
   { to: '/advisor', label: 'Asesor IA', icon: Brain },
 ];
 
 export default function Sidebar() {
-  const { insights } = useApp();
+  const { insights, fixedExpenses } = useApp();
   const unread = insights.filter(i => !i.leido).length;
+  const pendingFixed = fixedExpenses.filter(e => !e.pagadoEsteMes).length;
 
   return (
     <aside className="w-64 bg-surface-850 border-r border-white/5 flex flex-col min-h-screen">
@@ -50,6 +55,11 @@ export default function Sidebar() {
             {label === 'Asesor IA' && unread > 0 && (
               <span className="ml-auto bg-brand-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                 {unread > 9 ? '9+' : unread}
+              </span>
+            )}
+            {label === 'Gastos Fijos' && pendingFixed > 0 && (
+              <span className="ml-auto bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                {pendingFixed}
               </span>
             )}
           </NavLink>

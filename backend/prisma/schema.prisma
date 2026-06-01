@@ -17,7 +17,7 @@ model Transaction {
   tipo            String           // gasto | ingreso | inversion | ahorro
   descripcion     String?
   cuenta          String           @default("Billetera")
-  etiquetas       String           @default("[]") // JSON array serializado
+  etiquetas       String           @default("[]")
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   goalAllocations GoalAllocation[]
@@ -29,9 +29,9 @@ model Goal {
   montoObjetivoUSD       Float
   fechaTargetInicio      DateTime
   fechaTargetFin         DateTime
-  ahorroActualUSD        Float            @default(0) // saldo inicial manual
+  ahorroActualUSD        Float            @default(0)
   recomendacionInversion String?
-  estado                 String           @default("en_progreso") // en_progreso | alcanzada
+  estado                 String           @default("en_progreso")
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   allocations            GoalAllocation[]
@@ -50,13 +50,56 @@ model GoalAllocation {
   @@index([goalId])
 }
 
+model FixedExpense {
+  id         String    @id @default(uuid())
+  nombre     String
+  monto      Float
+  categoria  String
+  diaMes     Int       @default(1)
+  activo     Boolean   @default(true)
+  ultimoPago DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Loan {
+  id                  String        @id @default(uuid())
+  nombre              String
+  tipo                String        // hipotecario | personal | auto | otro
+  saldoActual         Float
+  tasaAnual           Float
+  esUVA               Boolean       @default(false)
+  totalCuotas         Int
+  cuotaPagada         Int           @default(0) // última cuota pagada
+  montoCuotaActual    Float
+  montoCuotaOriginal  Float
+  fechaPrimeraCuota   DateTime
+  diaPago             Int           @default(10)
+  estado              String        @default("activo") // activo | cancelado
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  pagos               LoanPayment[]
+}
+
+model LoanPayment {
+  id           String   @id @default(uuid())
+  loanId       String
+  loan         Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  numeroCuota  Int
+  montoPagado  Float
+  fecha        DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([loanId])
+}
+
 model Insight {
   id        String   @id @default(uuid())
   fecha     DateTime @default(now())
-  tipo      String   // alerta | oportunidad | recomendacion
+  tipo      String
   categoria String
   mensaje   String
-  impacto   String   // alto | medio | bajo
+  impacto   String
   accion    String
   leido     Boolean  @default(false)
   createdAt DateTime @default(now())

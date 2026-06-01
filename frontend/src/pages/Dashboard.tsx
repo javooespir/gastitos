@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { TrendingDown, TrendingUp, PiggyBank, Plus, AlertCircle } from 'lucide-react';
+import { TrendingDown, TrendingUp, PiggyBank, Plus, AlertCircle, CalendarClock, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Header from '../components/Layout/Header';
 import TransactionForm from '../components/TransactionForm/TransactionForm';
 import CategoryPieChart from '../components/Charts/CategoryPieChart';
@@ -42,7 +43,7 @@ function StatCard({
 }
 
 export default function Dashboard() {
-  const { monthlySummary, history, transactions, insights, refreshTransactions, refreshSummary } = useApp();
+  const { monthlySummary, history, transactions, insights, fixedExpenses, loans, refreshTransactions, refreshSummary } = useApp();
   const [showForm, setShowForm] = useState(false);
 
   const recent = transactions.slice(0, 8);
@@ -55,6 +56,11 @@ export default function Dashboard() {
 
   const now = new Date();
   const monthName = now.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+
+  const fixedTotal = fixedExpenses.reduce((s, e) => s + e.monto, 0);
+  const fixedPendiente = fixedExpenses.filter(e => !e.pagadoEsteMes).reduce((s, e) => s + e.monto, 0);
+  const fixedPendienteCount = fixedExpenses.filter(e => !e.pagadoEsteMes).length;
+  const totalCuotasCreditos = loans.filter(l => l.estado === 'activo').reduce((s, l) => s + l.montoCuotaActual, 0);
 
   return (
     <>
@@ -119,6 +125,54 @@ export default function Dashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Fixed expenses + loans widget */}
+        {(fixedExpenses.length > 0 || loans.filter(l => l.estado === 'activo').length > 0) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {fixedExpenses.length > 0 && (
+              <div className={`rounded-2xl p-5 border ${fixedPendiente > 0 ? 'bg-amber-500/5 border-amber-500/20' : 'bg-surface-850 border-white/5'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <CalendarClock className={`w-4 h-4 ${fixedPendiente > 0 ? 'text-amber-400' : 'text-slate-400'}`} />
+                    <span className={`text-sm font-medium ${fixedPendiente > 0 ? 'text-amber-300' : 'text-slate-300'}`}>Gastos fijos</span>
+                  </div>
+                  <Link to="/fixed-expenses" className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
+                    Ver <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+                {fixedPendiente > 0 ? (
+                  <>
+                    <p className="text-xs text-amber-400/70 mb-1">Reservá para pagar este mes</p>
+                    <p className="text-2xl font-bold font-mono text-amber-400">{formatARS(fixedPendiente)}</p>
+                    <p className="text-xs text-slate-500 mt-1">{fixedPendienteCount} pendiente{fixedPendienteCount !== 1 ? 's' : ''} de {fixedExpenses.length} total</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-emerald-400/70 mb-1">Todos pagados este mes ✓</p>
+                    <p className="text-2xl font-bold font-mono text-slate-300">{formatARS(fixedTotal)}</p>
+                    <p className="text-xs text-slate-500 mt-1">{fixedExpenses.length} gastos fijos</p>
+                  </>
+                )}
+              </div>
+            )}
+            {loans.filter(l => l.estado === 'activo').length > 0 && (
+              <div className="bg-surface-850 border border-red-500/10 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="w-4 h-4 text-red-400" />
+                    <span className="text-sm font-medium text-slate-300">Cuotas créditos</span>
+                  </div>
+                  <Link to="/loans" className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
+                    Ver <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+                <p className="text-xs text-red-400/70 mb-1">A pagar este mes</p>
+                <p className="text-2xl font-bold font-mono text-red-400">{formatARS(totalCuotasCreditos)}</p>
+                <p className="text-xs text-slate-500 mt-1">{loans.filter(l => l.estado === 'activo').length} crédito{loans.filter(l => l.estado === 'activo').length !== 1 ? 's' : ''} activo{loans.filter(l => l.estado === 'activo').length !== 1 ? 's' : ''}</p>
+              </div>
+            )}
           </div>
         )}
 
