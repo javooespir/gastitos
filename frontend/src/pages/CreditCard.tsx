@@ -94,7 +94,7 @@ export default function CreditCard() {
       const parsed: ParsedTransaction[] = (res.data.transactions || []).map((t: any) => ({
         ...t,
         selected: true,
-        categoria: 'Otros',
+        categoria: t.descripcion?.toLowerCase().includes('impuesto') || t.descripcion?.toLowerCase().includes('cargo') ? 'Impuestos' : 'Otros',
         moneda: t.moneda || 'ARS',
         titular: t.titular || 'PRINCIPAL',
         editing: false

@@ -15,25 +15,37 @@ async function extractTransactionsWithGroq(pdfText: string, banco: string): Prom
   if (!key) throw new Error('GROQ_API_KEY no configurada');
 
   const systemPrompt = `Sos un experto en analizar resúmenes de tarjetas de crédito de ${banco} Argentina.
-Tu tarea es extraer TODAS las transacciones de consumo del texto y devolver un JSON array.
+Tu tarea es extraer TODAS las transacciones de consumo Y los impuestos/cargos del texto y devolver un JSON array.
 
 Cada item debe tener EXACTAMENTE este formato:
-{"fecha": "YYYY-MM-DD", "descripcion": "nombre del comercio", "monto": 1234.56, "moneda": "ARS", "cuotas": null, "titular": "JAVIER"}
+{"fecha": "YYYY-MM-DD", "descripcion": "nombre del comercio", "monto": 1234.56, "moneda": "ARS", "cuotas": null, "titular": "ESPIR"}
 
 REGLAS CRÍTICAS:
-- fecha: convertí "07-May-26" → "2026-05-07", "10-Abr-26" → "2026-04-10", etc.
-- descripcion: solo el nombre del comercio/servicio, limpio. Sin códigos de autorización, sin NRO de cupón, sin letras/números de autorización como "MN7Q0FD2S".
-  Ejemplos: "APPLE.COM BILL" → "Apple", "MERPAGO*SHELL" → "Shell", "AUTOPISTAS URBAN" → "Autopistas Urban", "CIA SEG LA MER5168317330101-000-000" → "CIA SEG LA MER"
-- moneda y monto: CRÍTICO - en BBVA los resúmenes tienen columna PESOS y columna DÓLARES:
-  * Si el monto está en la columna PESOS → moneda: "ARS", monto: valor en pesos (ej: 33419.67)
-  * Si el monto está en la columna DÓLARES, O la descripción dice "USD X,XX" al final → moneda: "USD", monto: valor en dólares (ej: 1.99)
-  * Señales de que es USD: descripción termina en "USD 3,98" o "USD 1,99", o el número es pequeño (menos de 100) y aparece en columna DÓLARES
-- cuotas: si dice "C.01/06" → "1/6", "C.02/03" → "2/3", pago único → null
-- titular: si el resumen tiene secciones por nombre, indicá el apellido del titular (ej: "ESPIR", "CEJAS", "MARQUEZ"). Si no hay secciones, "PRINCIPAL"
-- Incluí consumos de TODOS los titulares (principal y adicionales)
-- Ignorá: pagos realizados (SU PAGO EN PESOS/USD), créditos/devoluciones (CR.RG), impuestos, intereses, cargos bancarios, membresías, cuotas a vencer
-- Los montos en el PDF usan punto como separador de miles y coma como decimal: "33.419,67" → 33419.67
-- Devolvé SOLO el JSON array, sin texto adicional, sin markdown, sin explicaciones.`;
+
+1. CONSUMOS: Extraé cada compra individual de todas las secciones "Consumos NOMBRE":
+   - descripcion: solo el nombre del comercio/servicio, limpio. Sin códigos de autorización, sin NRO de cupón.
+     Ejemplos: "APPLE.COM BILL MN7Q0FD2SUSD 1,99" → "Apple", "MERPAGO*SHELL" → "Shell", "AUTOPISTAS URBAN 000000006024318" → "Autopistas Urban", "CIA SEG LA MER5168317330101-000-000" → "CIA SEG LA MER"
+   - moneda y monto CRÍTICO - BBVA tiene columna PESOS y columna DÓLARES:
+     * Monto en columna PESOS → moneda: "ARS", usar ese valor
+     * Monto en columna DÓLARES, O descripción termina en "USD X,XX" → moneda: "USD", usar el valor en dólares
+   - cuotas: "C.01/06" → "1/6", "C.02/03" → "2/3", pago único → null
+   - titular: apellido del titular de la sección (ej: "ESPIR", "CEJAS", "MARQUEZ")
+
+2. IMPUESTOS Y CARGOS: Buscá la sección "Impuestos, cargos e intereses".
+   - Sumá TODOS los montos en PESOS de esa sección en UNA SOLA transacción:
+     * descripcion: "Impuestos y cargos tarjeta"
+     * monto: suma total de todos los ítems de esa sección (IMPUESTO DE SELLOS + INTERESES + IVA + IIBB + DB.RG, etc.)
+     * moneda: "ARS"
+     * cuotas: null
+     * titular: "ESPIR"
+     * fecha: usar la fecha de cierre del resumen (la que aparece como "CIERRE ACTUAL")
+   - Ignorá los montos en DÓLARES de esa sección.
+
+3. IGNORÁ siempre: pagos realizados (SU PAGO EN PESOS/USD), créditos/devoluciones (CR.RG), cuotas a vencer futuras.
+
+4. Los montos en el PDF usan punto como separador de miles y coma como decimal: "33.419,67" → 33419.67
+
+Devolvé SOLO el JSON array, sin texto adicional, sin markdown, sin explicaciones.`;
 
   const userMessage = `Extraé las transacciones de este resumen de tarjeta BBVA Argentina:\n\n${pdfText.substring(0, 10000)}`;
 

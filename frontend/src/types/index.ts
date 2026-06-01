@@ -129,7 +129,7 @@ export const CATEGORIES = {
     'Salud', 'Ocio', 'Casa', 'Café', 'Educación', 'Regalos',
     'Alimentación', 'Familia', 'Rutina', 'Auto', 'Otros', 'Ropa',
     'Salidas', 'Carreras', 'Néstor', 'Helado', 'Tarjeta', 'Crédito',
-    'Viajes', 'Efectivo', 'Farmacia'
+    'Viajes', 'Efectivo', 'Farmacia', 'Impuestos'
   ],
   ingresos: ['Ahorro p/viajar', 'Salario', 'Emprendimiento']
 } as const;
