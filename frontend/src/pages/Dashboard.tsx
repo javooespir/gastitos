@@ -1,21 +1,19 @@
-import { useState } from 'react';
-import { TrendingDown, TrendingUp, PiggyBank, Plus, AlertCircle, CalendarClock, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { TrendingDown, TrendingUp, PiggyBank, Plus, AlertCircle, CalendarClock, ArrowRight, ChevronLeft, ChevronRight, Wallet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Header from '../components/Layout/Header';
 import TransactionForm from '../components/TransactionForm/TransactionForm';
 import CategoryPieChart from '../components/Charts/CategoryPieChart';
 import MonthlyBarChart from '../components/Charts/MonthlyBarChart';
 import { useApp } from '../context/AppContext';
+import { transactionsApi } from '../api/client';
 import { formatARS, formatUSD, formatRelative } from '../utils/formatters';
-import { CATEGORY_COLORS } from '../types';
+import { CATEGORY_COLORS, MonthlySummary } from '../types';
 
-function StatCard({
-  label, ars, usd, icon: Icon, color
-}: {
-  label: string;
-  ars: number;
-  usd: number;
-  icon: any;
+const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function StatCard({ label, ars, usd, icon: Icon, color }: {
+  label: string; ars: number; usd: number; icon: any;
   color: 'red' | 'green' | 'blue' | 'purple';
 }) {
   const colors = {
@@ -27,7 +25,6 @@ function StatCard({
   const iconColors = {
     red: 'text-red-400', green: 'text-emerald-400', blue: 'text-blue-400', purple: 'text-purple-400'
   };
-
   return (
     <div className="bg-surface-850 border border-white/5 rounded-2xl p-5 hover:border-white/10 transition-colors">
       <div className="flex items-center justify-between mb-4">
@@ -43,79 +40,136 @@ function StatCard({
 }
 
 export default function Dashboard() {
-  const { monthlySummary, history, transactions, insights, fixedExpenses, loans, refreshTransactions, refreshSummary } = useApp();
+  const { history, transactions, insights, fixedExpenses, loans, goals, refreshTransactions, refreshSummary } = useApp();
   const [showForm, setShowForm] = useState(false);
 
-  const recent = transactions.slice(0, 8);
-  const unreadAlerts = insights.filter(i => !i.leido && i.tipo === 'alerta').slice(0, 3);
+  // Month navigator — own local state so it doesn't affect AppContext
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [summary, setSummary] = useState<MonthlySummary | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+
+  const fetchSummary = useCallback(async (y: number, m: number) => {
+    setLoadingSummary(true);
+    try {
+      const res = await transactionsApi.monthlySummary(y, m);
+      setSummary(res.data);
+    } catch { /* silent */ } finally {
+      setLoadingSummary(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchSummary(year, month); }, [year, month, fetchSummary]);
+
+  const prevMonth = () => {
+    if (month === 1) { setYear(y => y - 1); setMonth(12); }
+    else setMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (month === 12) { setYear(y => y + 1); setMonth(1); }
+    else setMonth(m => m + 1);
+  };
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
 
   const handleSuccess = () => {
     refreshTransactions();
     refreshSummary();
+    fetchSummary(year, month);
   };
 
-  const now = new Date();
-  const monthName = now.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
-
+  const recent = transactions.slice(0, 8);
+  const unreadAlerts = insights.filter(i => !i.leido && i.tipo === 'alerta').slice(0, 3);
   const fixedTotal = fixedExpenses.reduce((s, e) => s + e.monto, 0);
   const fixedPendiente = fixedExpenses.filter(e => !e.pagadoEsteMes).reduce((s, e) => s + e.monto, 0);
   const fixedPendienteCount = fixedExpenses.filter(e => !e.pagadoEsteMes).length;
   const totalCuotasCreditos = loans.filter(l => l.estado === 'activo').reduce((s, l) => s + l.montoCuotaActual, 0);
 
+  // Total acumulado en metas
+  const totalAhorradoMetas = goals.reduce((s, g) => s + (g.ahorroTotalUSD ?? g.ahorroActualUSD), 0);
+  const totalObjetivoMetas = goals.reduce((s, g) => s + g.montoObjetivoUSD, 0);
+  const pctMetas = totalObjetivoMetas > 0 ? Math.min(100, Math.round((totalAhorradoMetas / totalObjetivoMetas) * 100)) : 0;
+
   return (
     <>
-      <Header
-        title="Dashboard"
-        subtitle={`Resumen de ${monthName}`}
-      />
+      <Header title="Dashboard" subtitle="Resumen mensual" />
 
       <div className="p-8 space-y-8">
+
+        {/* Month navigator */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={prevMonth} className="p-2 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="text-center min-w-[170px]">
+              <span className="text-lg font-semibold text-white capitalize">
+                {MONTHS_ES[month - 1]} {year}
+              </span>
+              {!isCurrentMonth && (
+                <button onClick={() => { setYear(now.getFullYear()); setMonth(now.getMonth() + 1); }}
+                  className="block text-xs text-brand-400 hover:text-brand-300 mx-auto mt-0.5 transition-colors">
+                  ← Mes actual
+                </button>
+              )}
+            </div>
+            <button onClick={nextMonth} className="p-2 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+          {loadingSummary && <span className="text-xs text-slate-500 animate-pulse">Cargando...</span>}
+        </div>
+
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Gastos del mes"
-            ars={monthlySummary?.totalGastadoARS ?? 0}
-            usd={monthlySummary?.totalGastadoUSD ?? 0}
-            icon={TrendingDown}
-            color="red"
-          />
-          <StatCard
-            label="Ingresos del mes"
-            ars={monthlySummary?.totalIngresadoARS ?? 0}
-            usd={monthlySummary?.totalIngresadoUSD ?? 0}
-            icon={TrendingUp}
-            color="green"
-          />
-          <StatCard
-            label="Ahorro del mes"
-            ars={monthlySummary?.totalAhorradoARS ?? 0}
-            usd={monthlySummary?.totalAhorradoUSD ?? 0}
-            icon={PiggyBank}
-            color="blue"
-          />
-          <StatCard
-            label="Balance neto"
-            ars={(monthlySummary?.totalIngresadoARS ?? 0) - (monthlySummary?.totalGastadoARS ?? 0)}
-            usd={(monthlySummary?.totalIngresadoUSD ?? 0) - (monthlySummary?.totalGastadoUSD ?? 0)}
-            icon={TrendingUp}
-            color="purple"
-          />
+          <StatCard label="Gastos del mes" ars={summary?.totalGastadoARS ?? 0} usd={summary?.totalGastadoUSD ?? 0} icon={TrendingDown} color="red" />
+          <StatCard label="Ingresos del mes" ars={summary?.totalIngresadoARS ?? 0} usd={summary?.totalIngresadoUSD ?? 0} icon={TrendingUp} color="green" />
+          <StatCard label="Ahorro del mes" ars={summary?.totalAhorradoARS ?? 0} usd={summary?.totalAhorradoUSD ?? 0} icon={PiggyBank} color="blue" />
+          <StatCard label="Balance neto"
+            ars={(summary?.totalIngresadoARS ?? 0) - (summary?.totalGastadoARS ?? 0)}
+            usd={(summary?.totalIngresadoUSD ?? 0) - (summary?.totalGastadoUSD ?? 0)}
+            icon={TrendingUp} color="purple" />
         </div>
+
+        {/* Total savings across goals */}
+        {goals.length > 0 && (
+          <div className="bg-surface-850 border border-blue-500/15 rounded-2xl p-5">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center">
+                  <Wallet className="w-4 h-4 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 mb-0.5">Ahorro acumulado en metas</p>
+                  <p className="text-xl font-bold font-mono text-blue-400">{formatUSD(totalAhorradoMetas)}</p>
+                </div>
+              </div>
+              <div className="flex-1 min-w-[120px]">
+                <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+                  <span>{pctMetas}% del objetivo</span>
+                  <span>{formatUSD(totalObjetivoMetas)}</span>
+                </div>
+                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${pctMetas}%` }} />
+                </div>
+                <p className="text-xs text-slate-600 mt-1">{goals.length} meta{goals.length !== 1 ? 's' : ''} activa{goals.length !== 1 ? 's' : ''}</p>
+              </div>
+              <Link to="/goals" className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors flex-shrink-0">
+                Ver metas <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Alerts */}
         {unreadAlerts.length > 0 && (
           <div className="space-y-2">
             {unreadAlerts.map(alert => (
-              <div
-                key={alert.id}
-                className={`flex items-start gap-3 p-4 rounded-xl border ${
-                  alert.impacto === 'alto'
-                    ? 'bg-red-500/10 border-red-500/20'
-                    : alert.impacto === 'medio'
-                    ? 'bg-amber-500/10 border-amber-500/20'
-                    : 'bg-blue-500/10 border-blue-500/20'
-                }`}
-              >
+              <div key={alert.id} className={`flex items-start gap-3 p-4 rounded-xl border ${
+                alert.impacto === 'alto' ? 'bg-red-500/10 border-red-500/20' :
+                alert.impacto === 'medio' ? 'bg-amber-500/10 border-amber-500/20' :
+                'bg-blue-500/10 border-blue-500/20'
+              }`}>
                 <AlertCircle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
                   alert.impacto === 'alto' ? 'text-red-400' : alert.impacto === 'medio' ? 'text-amber-400' : 'text-blue-400'
                 }`} />
@@ -128,7 +182,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Fixed expenses + loans widget */}
+        {/* Fixed expenses + loans */}
         {(fixedExpenses.length > 0 || loans.filter(l => l.estado === 'activo').length > 0) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {fixedExpenses.length > 0 && (
@@ -180,9 +234,8 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-surface-850 border border-white/5 rounded-2xl p-6">
             <h2 className="text-sm font-semibold text-slate-300 mb-4">Gasto por categoría</h2>
-            <CategoryPieChart data={monthlySummary?.categorySums ?? {}} />
+            <CategoryPieChart data={summary?.categorySums ?? {}} />
           </div>
-
           <div className="bg-surface-850 border border-white/5 rounded-2xl p-6">
             <h2 className="text-sm font-semibold text-slate-300 mb-4">Evolución mensual (6 meses)</h2>
             <MonthlyBarChart history={history} />
@@ -193,22 +246,15 @@ export default function Dashboard() {
         <div className="bg-surface-850 border border-white/5 rounded-2xl">
           <div className="flex items-center justify-between p-6 border-b border-white/5">
             <h2 className="text-sm font-semibold text-slate-300">Transacciones recientes</h2>
-            <button
-              onClick={() => setShowForm(true)}
-              className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Nueva
+            <button onClick={() => setShowForm(true)}
+              className="flex items-center gap-2 bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors">
+              <Plus className="w-4 h-4" /> Nueva
             </button>
           </div>
-
           {recent.length === 0 ? (
             <div className="p-12 text-center">
               <p className="text-slate-500 text-sm">No hay transacciones aún.</p>
-              <button
-                onClick={() => setShowForm(true)}
-                className="mt-4 text-brand-400 hover:text-brand-300 text-sm font-medium"
-              >
+              <button onClick={() => setShowForm(true)} className="mt-4 text-brand-400 hover:text-brand-300 text-sm font-medium">
                 Agregar la primera
               </button>
             </div>
@@ -216,10 +262,8 @@ export default function Dashboard() {
             <div className="divide-y divide-white/5">
               {recent.map(t => (
                 <div key={t.id} className="flex items-center px-6 py-4 hover:bg-white/2 transition-colors gap-4">
-                  <div
-                    className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
-                    style={{ backgroundColor: `${CATEGORY_COLORS[t.categoria] ?? '#64748b'}30`, color: CATEGORY_COLORS[t.categoria] ?? '#94a3b8' }}
-                  >
+                  <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
+                    style={{ backgroundColor: `${CATEGORY_COLORS[t.categoria] ?? '#64748b'}30`, color: CATEGORY_COLORS[t.categoria] ?? '#94a3b8' }}>
                     {t.categoria.slice(0, 2)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -244,10 +288,7 @@ export default function Dashboard() {
       </div>
 
       {showForm && (
-        <TransactionForm
-          onClose={() => setShowForm(false)}
-          onSuccess={handleSuccess}
-        />
+        <TransactionForm onClose={() => setShowForm(false)} onSuccess={handleSuccess} />
       )}
     </>
   );

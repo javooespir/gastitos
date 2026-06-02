@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Plus, Search, Trash2, Edit2 } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Plus, Search, Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
 import Header from '../components/Layout/Header';
 import TransactionForm from '../components/TransactionForm/TransactionForm';
 import { useApp } from '../context/AppContext';
@@ -7,14 +7,44 @@ import { transactionsApi } from '../api/client';
 import { ALL_CATEGORIES, CATEGORY_COLORS, Transaction } from '../types';
 import { formatARS, formatUSD, formatDate } from '../utils/formatters';
 
+const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
 export default function Transactions() {
-  const { transactions, refreshTransactions, refreshSummary } = useApp();
+  const { refreshTransactions, refreshSummary } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [filterTipo, setFilterTipo] = useState('');
   const [filterCat, setFilterCat] = useState('');
   const [deleting, setDeleting] = useState<string | null>(null);
+
+  // Month filter — fetch from API for the selected month
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loadingTx, setLoadingTx] = useState(false);
+
+  const fetchTransactions = useCallback(async (y: number, m: number) => {
+    setLoadingTx(true);
+    try {
+      const start = new Date(y, m - 1, 1).toISOString();
+      const end = new Date(y, m, 0, 23, 59, 59).toISOString();
+      const res = await transactionsApi.list({ startDate: start, endDate: end, limit: 500 });
+      setTransactions(res.data.data ?? res.data);
+    } catch { /* silent */ } finally { setLoadingTx(false); }
+  }, []);
+
+  useEffect(() => { fetchTransactions(year, month); }, [year, month, fetchTransactions]);
+
+  const prevMonth = () => {
+    if (month === 1) { setYear(y => y - 1); setMonth(12); }
+    else setMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (month === 12) { setYear(y => y + 1); setMonth(1); }
+    else setMonth(m => m + 1);
+  };
 
   const filtered = useMemo(() => {
     return transactions.filter(t => {
@@ -39,6 +69,7 @@ export default function Transactions() {
       await transactionsApi.remove(id);
       refreshTransactions();
       refreshSummary();
+      fetchTransactions(year, month);
     } catch {
       alert('Error al eliminar');
     } finally {
@@ -54,6 +85,7 @@ export default function Transactions() {
   const handleSuccess = () => {
     refreshTransactions();
     refreshSummary();
+    fetchTransactions(year, month);
   };
 
   const handleClose = () => {
@@ -65,10 +97,24 @@ export default function Transactions() {
     <>
       <Header
         title="Transacciones"
-        subtitle={`${filtered.length} de ${transactions.length} transacciones`}
+        subtitle={`${filtered.length} transacciones · ${MONTHS_ES[month - 1]} ${year}`}
       />
 
       <div className="p-8 space-y-6">
+        {/* Month navigator */}
+        <div className="flex items-center gap-3">
+          <button onClick={prevMonth} className="p-2 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-base font-semibold text-white capitalize min-w-[140px] text-center">
+            {MONTHS_ES[month - 1]} {year}
+          </span>
+          <button onClick={nextMonth} className="p-2 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          {loadingTx && <span className="text-xs text-slate-500 animate-pulse ml-2">Cargando...</span>}
+        </div>
+
         {/* Controls */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
