@@ -1,10 +1,19 @@
-import { useState, FormEvent } from 'react';
-import { Plus, Target, X, Edit2, Check, TrendingUp, ArrowUpRight, Clock, Wallet } from 'lucide-react';
+import { useState, useEffect, useCallback, FormEvent } from 'react';
+import { Plus, Target, X, Edit2, Check, TrendingUp, ArrowUpRight, Clock, Wallet, PiggyBank } from 'lucide-react';
 import Header from '../components/Layout/Header';
 import { useApp } from '../context/AppContext';
-import { goalsApi } from '../api/client';
+import { goalsApi, transactionsApi } from '../api/client';
 import { Goal } from '../types';
-import { formatUSD, formatDate, clamp } from '../utils/formatters';
+import { formatUSD, formatARS, formatDate, clamp } from '../utils/formatters';
+
+interface SavingsTotals {
+  totalAhorroARS: number;
+  totalAhorroUSD: number;
+  totalInversionARS: number;
+  totalInversionUSD: number;
+  countAhorro: number;
+  countInversion: number;
+}
 
 function AllocationBadge({ tipo }: { tipo: string }) {
   const colors: Record<string, string> = {
@@ -240,6 +249,17 @@ function GoalCard({ goal, onUpdate, onDelete }: {
 export default function Goals() {
   const { goals, refreshGoals } = useApp();
   const [showForm, setShowForm] = useState(false);
+  const [savingsTotals, setSavingsTotals] = useState<SavingsTotals | null>(null);
+
+  const fetchTotals = useCallback(async () => {
+    try {
+      const res = await transactionsApi.totals();
+      setSavingsTotals(res.data);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchTotals(); }, [fetchTotals]);
+
   const [form, setForm] = useState({
     nombre: '',
     montoObjetivoUSD: '',
@@ -273,10 +293,49 @@ export default function Goals() {
 
   return (
     <>
-      <Header title="Metas de Ahorro" subtitle={`${active.length} activas · ${done.length} alcanzadas`} />
+      <Header title="Metas / Ahorro" subtitle={`${active.length} metas activas · ${done.length} alcanzadas`} />
 
       <div className="p-8 space-y-8">
-        {/* Summary bar */}
+
+        {/* Bolsa de ahorros — todos los ahorros acumulados de todos los meses */}
+        {savingsTotals && (savingsTotals.totalAhorroARS > 0 || savingsTotals.totalAhorroUSD > 0 || savingsTotals.totalInversionUSD > 0) && (
+          <div className="bg-surface-850 border border-blue-500/15 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center">
+                <PiggyBank className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-white">Bolsa de ahorros</h2>
+                <p className="text-xs text-slate-500">Suma de todos los ahorros registrados, de todos los meses</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {savingsTotals.totalAhorroARS > 0 && (
+                <div className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-4">
+                  <p className="text-xs text-slate-500 mb-1">Ahorros en pesos</p>
+                  <p className="text-xl font-bold font-mono text-blue-400">{formatARS(savingsTotals.totalAhorroARS)}</p>
+                  <p className="text-xs text-slate-600 mt-1">{savingsTotals.countAhorro} transacciones</p>
+                </div>
+              )}
+              {savingsTotals.totalAhorroUSD > 0 && (
+                <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-4">
+                  <p className="text-xs text-slate-500 mb-1">Ahorros en USD</p>
+                  <p className="text-xl font-bold font-mono text-emerald-400">{formatUSD(savingsTotals.totalAhorroUSD)}</p>
+                  <p className="text-xs text-slate-600 mt-1">Valor fijo al momento de cada compra</p>
+                </div>
+              )}
+              {savingsTotals.totalInversionUSD > 0 && (
+                <div className="bg-purple-500/5 border border-purple-500/15 rounded-xl p-4">
+                  <p className="text-xs text-slate-500 mb-1">Inversiones USD</p>
+                  <p className="text-xl font-bold font-mono text-purple-400">{formatUSD(savingsTotals.totalInversionUSD)}</p>
+                  <p className="text-xs text-slate-600 mt-1">{savingsTotals.countInversion} transacciones</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Goals summary bar + new button */}
         {goals.length > 0 && (
           <div className="bg-surface-850 border border-white/5 rounded-2xl p-5 flex items-center justify-between gap-6">
             <div>

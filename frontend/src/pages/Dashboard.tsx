@@ -8,7 +8,7 @@ import MonthlyBarChart from '../components/Charts/MonthlyBarChart';
 import { useApp } from '../context/AppContext';
 import { transactionsApi } from '../api/client';
 import { formatARS, formatUSD, formatRelative } from '../utils/formatters';
-import { CATEGORY_COLORS, MonthlySummary } from '../types';
+import { CATEGORY_COLORS, MonthlySummary, Transaction } from '../types';
 
 interface SavingsTotals {
   totalAhorroARS: number;
@@ -59,6 +59,7 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [savingsTotals, setSavingsTotals] = useState<SavingsTotals | null>(null);
+  const [recentTxs, setRecentTxs] = useState<Transaction[]>([]);
 
   const fetchSummary = useCallback(async (y: number, m: number) => {
     setLoadingSummary(true);
@@ -77,7 +78,18 @@ export default function Dashboard() {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { fetchSummary(year, month); }, [year, month, fetchSummary]);
+  // Fetch recent transactions for the selected month, excluding Tarjeta BBVA
+  const fetchRecent = useCallback(async (y: number, m: number) => {
+    try {
+      const start = new Date(y, m - 1, 1).toISOString();
+      const end = new Date(y, m, 0, 23, 59, 59).toISOString();
+      const res = await transactionsApi.list({ startDate: start, endDate: end, limit: 30 });
+      const all: Transaction[] = res.data.data ?? res.data;
+      setRecentTxs(all.filter(t => t.cuenta !== 'Tarjeta BBVA').slice(0, 8));
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchSummary(year, month); fetchRecent(year, month); }, [year, month, fetchSummary, fetchRecent]);
   useEffect(() => { fetchTotals(); }, [fetchTotals]);
 
   const prevMonth = () => {
@@ -94,10 +106,9 @@ export default function Dashboard() {
     refreshTransactions();
     refreshSummary();
     fetchSummary(year, month);
+    fetchRecent(year, month);
     fetchTotals();
   };
-
-  const recent = transactions.slice(0, 8);
   const unreadAlerts = insights.filter(i => !i.leido && i.tipo === 'alerta').slice(0, 3);
   const fixedTotal = fixedExpenses.reduce((s, e) => s + e.monto, 0);
   const fixedPendiente = fixedExpenses.filter(e => !e.pagadoEsteMes).reduce((s, e) => s + e.monto, 0);
@@ -154,7 +165,7 @@ export default function Dashboard() {
                   <Wallet className="w-4 h-4 text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Ahorro disponible total</p>
+                  <p className="text-xs text-slate-400 mb-0.5">Metas / Ahorro</p>
                   <p className="text-xs text-slate-500">Suma acumulada de todos los meses</p>
                 </div>
               </div>
@@ -180,8 +191,8 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-              <Link to="/transactions" className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors flex-shrink-0">
-                Ver todas <ArrowRight className="w-3 h-3" />
+              <Link to="/goals" className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors flex-shrink-0">
+                Ver metas <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
           </div>
@@ -277,16 +288,16 @@ export default function Dashboard() {
               <Plus className="w-4 h-4" /> Nueva
             </button>
           </div>
-          {recent.length === 0 ? (
+          {recentTxs.length === 0 ? (
             <div className="p-12 text-center">
-              <p className="text-slate-500 text-sm">No hay transacciones aún.</p>
+              <p className="text-slate-500 text-sm">No hay transacciones aún en este mes.</p>
               <button onClick={() => setShowForm(true)} className="mt-4 text-brand-400 hover:text-brand-300 text-sm font-medium">
                 Agregar la primera
               </button>
             </div>
           ) : (
             <div className="divide-y divide-white/5">
-              {recent.map(t => (
+              {recentTxs.map(t => (
                 <div key={t.id} className="flex items-center px-6 py-4 hover:bg-white/2 transition-colors gap-4">
                   <div className="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
                     style={{ backgroundColor: `${CATEGORY_COLORS[t.categoria] ?? '#64748b'}30`, color: CATEGORY_COLORS[t.categoria] ?? '#94a3b8' }}>
