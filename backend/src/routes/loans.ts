@@ -103,15 +103,20 @@ router.post('/:id/pagos', async (req: Request, res: Response, next: NextFunction
     });
 
     // Automatically create a gasto transaction for this payment
-    await createTransaction({
-      fecha: fechaDate.toISOString().split('T')[0],
-      categoria: 'Crédito',
-      montoARS: Number(montoPagado),
-      tipo: 'gasto',
-      descripcion: `Cuota ${numeroCuota} — ${loan.nombre}`,
-      cuenta: 'Billetera',
-      etiquetas: ['cuota', loan.tipo]
-    });
+    // Wrapped in its own try-catch: payment succeeds even if transaction creation fails
+    try {
+      await createTransaction({
+        fecha: fechaDate.toISOString().split('T')[0],
+        categoria: 'Crédito',
+        montoARS: Number(montoPagado),
+        tipo: 'gasto',
+        descripcion: `Cuota ${numeroCuota} — ${loan.nombre}`,
+        cuenta: 'Billetera',
+        etiquetas: ['cuota', loan.tipo]
+      });
+    } catch (txErr) {
+      console.error(`[loans] Failed to create transaction for payment (loan: ${loan.nombre}, cuota: ${numeroCuota}):`, txErr);
+    }
 
     res.status(201).json({ payment, loan: updatedLoan });
   } catch (err) { next(err); }

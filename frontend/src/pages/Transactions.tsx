@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, Search, Trash2, Edit2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2, ChevronLeft, ChevronRight, ChevronDown, CreditCard as CreditCardIcon } from 'lucide-react';
 import Header from '../components/Layout/Header';
 import TransactionForm from '../components/TransactionForm/TransactionForm';
 import { useApp } from '../context/AppContext';
@@ -8,6 +8,172 @@ import { ALL_CATEGORIES, CATEGORY_COLORS, Transaction } from '../types';
 import { formatARS, formatUSD, formatDate } from '../utils/formatters';
 
 const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+interface CardGroup {
+  label: string;
+  arsTotal: number;
+  usdTotal: number;
+  arsTxs: Transaction[];
+  usdTxs: Transaction[];
+}
+
+// Renders credit card transactions as 2 collapsible rows (ARS + USD)
+function CreditCardGroupRows({
+  group,
+  onDelete,
+  onEdit,
+  deleting
+}: {
+  group: CardGroup;
+  onDelete: (id: string) => void;
+  onEdit: (tx: Transaction) => void;
+  deleting: string | null;
+}) {
+  const [expandARS, setExpandARS] = useState(false);
+  const [expandUSD, setExpandUSD] = useState(false);
+
+  return (
+    <>
+      {/* ARS group row */}
+      {group.arsTotal > 0 && (
+        <>
+          <tr
+            onClick={() => setExpandARS(v => !v)}
+            className="hover:bg-white/3 cursor-pointer transition-colors border-b border-white/5"
+          >
+            <td className="px-6 py-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold bg-red-500/10 text-red-400">
+                  <CreditCardIcon className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-white font-medium">Tarjeta BBVA</span>
+              </div>
+            </td>
+            <td className="px-4 py-3">
+              <p className="text-slate-300 text-sm capitalize">Resumen {group.label} · Pesos</p>
+              <p className="text-xs text-slate-600">{group.arsTxs.length} movimientos</p>
+            </td>
+            <td className="px-4 py-3 text-slate-400">Tarjeta BBVA</td>
+            <td className="px-4 py-3 text-slate-400 font-mono">—</td>
+            <td className="px-4 py-3 text-right font-mono font-semibold text-red-400">
+              -{formatARS(group.arsTotal)}
+            </td>
+            <td className="px-4 py-3 text-right text-slate-600 font-mono text-xs">—</td>
+            <td className="px-6 py-3 text-right">
+              <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-red-500/10 text-red-400">Gasto</span>
+            </td>
+            <td className="px-4 py-3 text-right">
+              <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform inline ${expandARS ? 'rotate-180' : ''}`} />
+            </td>
+          </tr>
+          {expandARS && group.arsTxs.map(t => (
+            <tr key={t.id} className="bg-white/1 hover:bg-white/3 transition-colors group border-b border-white/5">
+              <td className="px-6 py-2 pl-16">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded flex items-center justify-center text-xs"
+                    style={{ backgroundColor: `${CATEGORY_COLORS[t.categoria] ?? '#64748b'}20`, color: CATEGORY_COLORS[t.categoria] ?? '#94a3b8' }}>
+                    {t.categoria.slice(0, 1)}
+                  </div>
+                  <span className="text-slate-400 text-xs">{t.categoria}</span>
+                </div>
+              </td>
+              <td className="px-4 py-2 text-slate-500 text-xs max-w-[180px] truncate">{t.descripcion || '—'}</td>
+              <td className="px-4 py-2 text-slate-600 text-xs">—</td>
+              <td className="px-4 py-2 text-slate-500 font-mono text-xs">{formatDate(t.fecha)}</td>
+              <td className="px-4 py-2 text-right font-mono text-xs text-red-400/70">-{formatARS(t.montoARS)}</td>
+              <td className="px-4 py-2 text-right text-slate-600 font-mono text-xs">—</td>
+              <td className="px-6 py-2"></td>
+              <td className="px-4 py-2">
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={e => { e.stopPropagation(); onEdit(t); }}
+                    className="p-1 rounded text-slate-600 hover:text-brand-400 hover:bg-brand-500/10 transition-colors">
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); onDelete(t.id); }}
+                    disabled={deleting === t.id}
+                    className="p-1 rounded text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </>
+      )}
+
+      {/* USD group row */}
+      {group.usdTotal > 0 && (
+        <>
+          <tr
+            onClick={() => setExpandUSD(v => !v)}
+            className="hover:bg-white/3 cursor-pointer transition-colors border-b border-white/5"
+          >
+            <td className="px-6 py-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-amber-500/10 text-amber-400">
+                  <CreditCardIcon className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-white font-medium">Tarjeta BBVA</span>
+              </div>
+            </td>
+            <td className="px-4 py-3">
+              <p className="text-slate-300 text-sm capitalize">Resumen {group.label} · Dólares</p>
+              <p className="text-xs text-slate-600">{group.usdTxs.length} movimientos</p>
+            </td>
+            <td className="px-4 py-3 text-slate-400">Tarjeta BBVA</td>
+            <td className="px-4 py-3 text-slate-400 font-mono">—</td>
+            <td className="px-4 py-3 text-right font-mono font-semibold text-slate-500">—</td>
+            <td className="px-4 py-3 text-right text-amber-400 font-mono text-sm font-semibold">
+              -{formatUSD(group.usdTotal)}
+            </td>
+            <td className="px-6 py-3 text-right">
+              <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-400">Gasto USD</span>
+            </td>
+            <td className="px-4 py-3 text-right">
+              <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform inline ${expandUSD ? 'rotate-180' : ''}`} />
+            </td>
+          </tr>
+          {expandUSD && group.usdTxs.map(t => (
+            <tr key={t.id} className="bg-white/1 hover:bg-white/3 transition-colors group border-b border-white/5">
+              <td className="px-6 py-2 pl-16">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded flex items-center justify-center text-xs"
+                    style={{ backgroundColor: `${CATEGORY_COLORS[t.categoria] ?? '#64748b'}20`, color: CATEGORY_COLORS[t.categoria] ?? '#94a3b8' }}>
+                    {t.categoria.slice(0, 1)}
+                  </div>
+                  <span className="text-slate-400 text-xs">{t.categoria}</span>
+                </div>
+              </td>
+              <td className="px-4 py-2 text-slate-500 text-xs max-w-[180px] truncate">{t.descripcion || '—'}</td>
+              <td className="px-4 py-2 text-slate-600 text-xs">—</td>
+              <td className="px-4 py-2 text-slate-500 font-mono text-xs">{formatDate(t.fecha)}</td>
+              <td className="px-4 py-2 text-right text-slate-600 font-mono text-xs">—</td>
+              <td className="px-4 py-2 text-right font-mono text-xs text-amber-400/70">-{formatUSD(t.montoUSD)}</td>
+              <td className="px-6 py-2"></td>
+              <td className="px-4 py-2">
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={e => { e.stopPropagation(); onEdit(t); }}
+                    className="p-1 rounded text-slate-600 hover:text-brand-400 hover:bg-brand-500/10 transition-colors">
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); onDelete(t.id); }}
+                    disabled={deleting === t.id}
+                    className="p-1 rounded text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </>
+      )}
+    </>
+  );
+}
 
 export default function Transactions() {
   const { refreshTransactions, refreshSummary } = useApp();
@@ -18,7 +184,6 @@ export default function Transactions() {
   const [filterCat, setFilterCat] = useState('');
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  // Month filter — fetch from API for the selected month
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -62,6 +227,33 @@ export default function Transactions() {
     });
   }, [transactions, search, filterTipo, filterCat]);
 
+  // Group credit card transactions into ARS + USD rows when no active filter
+  const { cardGroup, otherTxs, showGrouped } = useMemo(() => {
+    const noFilters = !search && !filterTipo && !filterCat;
+    const cardTxs = filtered.filter(t => t.cuenta === 'Tarjeta BBVA');
+    const others = filtered.filter(t => t.cuenta !== 'Tarjeta BBVA');
+
+    if (!noFilters || cardTxs.length === 0) {
+      return { cardGroup: null, otherTxs: filtered, showGrouped: false };
+    }
+
+    const monthLabel = `${MONTHS_ES[month - 1].toLowerCase()} ${year}`;
+    const group: CardGroup = {
+      label: monthLabel,
+      arsTotal: 0,
+      usdTotal: 0,
+      arsTxs: [],
+      usdTxs: []
+    };
+
+    for (const t of cardTxs) {
+      if (t.montoARS > 0) { group.arsTotal += t.montoARS; group.arsTxs.push(t); }
+      if (t.montoUSD > 0) { group.usdTotal += t.montoUSD; group.usdTxs.push(t); }
+    }
+
+    return { cardGroup: group, otherTxs: others, showGrouped: true };
+  }, [filtered, search, filterTipo, filterCat, month, year]);
+
   const handleDelete = async (id: string) => {
     if (!confirm('¿Eliminar esta transacción?')) return;
     setDeleting(id);
@@ -93,11 +285,15 @@ export default function Transactions() {
     setEditingTx(undefined);
   };
 
+  const totalRows = showGrouped
+    ? otherTxs.length + (cardGroup ? (cardGroup.arsTotal > 0 ? 1 : 0) + (cardGroup.usdTotal > 0 ? 1 : 0) : 0)
+    : filtered.length;
+
   return (
     <>
       <Header
         title="Transacciones"
-        subtitle={`${filtered.length} transacciones · ${MONTHS_ES[month - 1]} ${year}`}
+        subtitle={`${totalRows} filas · ${MONTHS_ES[month - 1]} ${year}`}
       />
 
       <div className="p-8 space-y-6">
@@ -168,7 +364,7 @@ export default function Transactions() {
                   <th className="px-4 py-4"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody>
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="text-center py-16 text-slate-500">
@@ -176,51 +372,64 @@ export default function Transactions() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(t => (
-                    <tr key={t.id} className="hover:bg-white/2 transition-colors group">
-                      <td className="px-6 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
-                            style={{ backgroundColor: `${CATEGORY_COLORS[t.categoria] ?? '#64748b'}20`, color: CATEGORY_COLORS[t.categoria] ?? '#94a3b8' }}>
-                            {t.categoria.slice(0, 2)}
+                  <>
+                    {/* Credit card grouped rows (only when no active filter) */}
+                    {showGrouped && cardGroup && (
+                      <CreditCardGroupRows
+                        group={cardGroup}
+                        onDelete={handleDelete}
+                        onEdit={handleEdit}
+                        deleting={deleting}
+                      />
+                    )}
+
+                    {/* Regular transactions */}
+                    {otherTxs.map(t => (
+                      <tr key={t.id} className="hover:bg-white/2 transition-colors group border-b border-white/5 last:border-0">
+                        <td className="px-6 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold"
+                              style={{ backgroundColor: `${CATEGORY_COLORS[t.categoria] ?? '#64748b'}20`, color: CATEGORY_COLORS[t.categoria] ?? '#94a3b8' }}>
+                              {t.categoria.slice(0, 2)}
+                            </div>
+                            <span className="text-white font-medium">{t.categoria}</span>
                           </div>
-                          <span className="text-white font-medium">{t.categoria}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-400 max-w-[180px] truncate">{t.descripcion || '—'}</td>
-                      <td className="px-4 py-3 text-slate-400">{t.cuenta}</td>
-                      <td className="px-4 py-3 text-slate-400 font-mono">{formatDate(t.fecha)}</td>
-                      <td className={`px-4 py-3 text-right font-mono font-semibold ${
-                        t.tipo === 'gasto' ? 'text-red-400' :
-                        t.tipo === 'ingreso' ? 'text-emerald-400' :
-                        t.tipo === 'ahorro' ? 'text-blue-400' : 'text-purple-400'
-                      }`}>
-                        {t.tipo === 'gasto' ? '-' : '+'}{formatARS(t.montoARS)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-500 font-mono text-xs">{formatUSD(t.montoUSD)}</td>
-                      <td className="px-6 py-3 text-right">
-                        <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${
-                          t.tipo === 'gasto' ? 'bg-red-500/10 text-red-400' :
-                          t.tipo === 'ingreso' ? 'bg-emerald-500/10 text-emerald-400' :
-                          t.tipo === 'ahorro' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'
+                        </td>
+                        <td className="px-4 py-3 text-slate-400 max-w-[180px] truncate">{t.descripcion || '—'}</td>
+                        <td className="px-4 py-3 text-slate-400">{t.cuenta}</td>
+                        <td className="px-4 py-3 text-slate-400 font-mono">{formatDate(t.fecha)}</td>
+                        <td className={`px-4 py-3 text-right font-mono font-semibold ${
+                          t.tipo === 'gasto' ? 'text-red-400' :
+                          t.tipo === 'ingreso' ? 'text-emerald-400' :
+                          t.tipo === 'ahorro' ? 'text-blue-400' : 'text-purple-400'
                         }`}>
-                          {t.tipo === 'inversion' ? 'Inversión' : t.tipo.charAt(0).toUpperCase() + t.tipo.slice(1)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => handleEdit(t)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-brand-400 hover:bg-brand-500/10 transition-colors">
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => handleDelete(t.id)} disabled={deleting === t.id}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                          {t.tipo === 'gasto' ? '-' : '+'}{formatARS(t.montoARS)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-500 font-mono text-xs">{formatUSD(t.montoUSD)}</td>
+                        <td className="px-6 py-3 text-right">
+                          <span className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${
+                            t.tipo === 'gasto' ? 'bg-red-500/10 text-red-400' :
+                            t.tipo === 'ingreso' ? 'bg-emerald-500/10 text-emerald-400' :
+                            t.tipo === 'ahorro' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'
+                          }`}>
+                            {t.tipo === 'inversion' ? 'Inversión' : t.tipo.charAt(0).toUpperCase() + t.tipo.slice(1)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleEdit(t)}
+                              className="p-1.5 rounded-lg text-slate-600 hover:text-brand-400 hover:bg-brand-500/10 transition-colors">
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => handleDelete(t.id)} disabled={deleting === t.id}
+                              className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </>
                 )}
               </tbody>
             </table>
