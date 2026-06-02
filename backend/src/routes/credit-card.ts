@@ -158,11 +158,14 @@ router.post('/parse', upload.single('pdf'), async (req: Request, res: Response, 
       return;
     }
 
+    // Extract taxes via regex FIRST using the FULL PDF text (no character limit)
+    // This ensures we capture ALL tax sections across multiple pages
+    const taxes = extractTaxesFromText(pdfText);
+
     // Extract transactions via AI (consumos only)
+    // For Groq, limit to 12,000 chars to avoid 413 Payload Too Large errors
     const transactions = await extractTransactionsWithGroq(pdfText, banco);
 
-    // Extract taxes via regex (reliable, not AI-dependent)
-    const taxes = extractTaxesFromText(pdfText);
     if (taxes && taxes.totalPesos > 0) {
       transactions.push({
         fecha: taxes.fecha,
