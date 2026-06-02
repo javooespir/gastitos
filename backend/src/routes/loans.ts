@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import prisma from '../lib/prisma';
+import { createTransaction } from '../services/transactionService';
 
 const router = Router();
 
@@ -75,12 +76,18 @@ router.post('/:id/pagos', async (req: Request, res: Response, next: NextFunction
     const loanId = req.params['id'] as string;
     const { numeroCuota, montoPagado, fecha, saldoActual } = req.body;
 
+    // Get loan name for the transaction description
+    const loan = await prisma.loan.findUnique({ where: { id: loanId } });
+    if (!loan) return res.status(404).json({ error: 'Crédito no encontrado' });
+
+    const fechaDate = new Date(fecha || Date.now());
+
     const payment = await prisma.loanPayment.create({
       data: {
         loanId,
         numeroCuota: Number(numeroCuota),
         montoPagado: Number(montoPagado),
-        fecha: new Date(fecha || Date.now())
+        fecha: fechaDate
       }
     });
 
@@ -89,13 +96,24 @@ router.post('/:id/pagos', async (req: Request, res: Response, next: NextFunction
     if (saldoActual !== undefined) updateData.saldoActual = Number(saldoActual);
     if (montoPagado !== undefined) updateData.montoCuotaActual = Number(montoPagado);
 
-    const loan = await prisma.loan.update({
+    const updatedLoan = await prisma.loan.update({
       where: { id: loanId },
       data: updateData,
       include: { pagos: { orderBy: { numeroCuota: 'asc' } } }
     });
 
-    res.status(201).json({ payment, loan });
+    // Automatically create a gasto transaction for this payment
+    await createTransaction({
+      fecha: fechaDate.toISOString().split('T')[0],
+      categoria: 'Crédito',
+      montoARS: Number(montoPagado),
+      tipo: 'gasto',
+      descripcion: `Cuota ${numeroCuota} — ${loan.nombre}`,
+      cuenta: 'Billetera',
+      etiquetas: ['cuota', loan.tipo]
+    });
+
+    res.status(201).json({ payment, loan: updatedLoan });
   } catch (err) { next(err); }
 });
 
