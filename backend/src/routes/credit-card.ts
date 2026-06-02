@@ -79,8 +79,9 @@ async function extractTransactionsWithGroq(pdfText: string, banco: string): Prom
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error('GROQ_API_KEY no configurada');
 
-  // Use full text — Groq llama-3.3-70b has large context window
-  const textToSend = pdfText.length > 25000 ? pdfText.substring(0, 25000) : pdfText;
+  // Use full text — but limit to 12,000 chars to avoid 413 Payload Too Large errors from Groq
+  // Even though llama-3.3-70b has large context, the request payload has limits
+  const textToSend = pdfText.length > 12000 ? pdfText.substring(0, 12000) : pdfText;
 
   const systemPrompt = `Sos un experto en analizar resúmenes de tarjetas de crédito de ${banco} Argentina.
 Tu tarea es extraer ÚNICAMENTE los CONSUMOS (compras) del texto. Los impuestos se calculan por separado, NO los incluyas.
