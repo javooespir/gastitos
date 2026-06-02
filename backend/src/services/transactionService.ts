@@ -93,8 +93,8 @@ export async function deleteTransaction(id: string) {
 }
 
 export async function getMonthlySummary(year: number, month: number) {
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 0, 23, 59, 59);
+  const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
   const transactions = await prisma.transaction.findMany({
     where: { fecha: { gte: start, lte: end } }

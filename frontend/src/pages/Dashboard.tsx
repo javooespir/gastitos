@@ -81,8 +81,8 @@ export default function Dashboard() {
   // Fetch recent transactions for the selected month, excluding Tarjeta BBVA
   const fetchRecent = useCallback(async (y: number, m: number) => {
     try {
-      const start = new Date(y, m - 1, 1).toISOString();
-      const end = new Date(y, m, 0, 23, 59, 59).toISOString();
+      const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0)).toISOString();
+      const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999)).toISOString();
       const res = await transactionsApi.list({ startDate: start, endDate: end, limit: 30 });
       const all: Transaction[] = res.data.data ?? res.data;
       setRecentTxs(all.filter(t => t.cuenta !== 'Tarjeta BBVA').slice(0, 8));

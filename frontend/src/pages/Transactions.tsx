@@ -214,8 +214,8 @@ export default function Transactions() {
   const fetchTransactions = useCallback(async (y: number, m: number) => {
     setLoadingTx(true);
     try {
-      const start = new Date(y, m - 1, 1).toISOString();
-      const end = new Date(y, m, 0, 23, 59, 59).toISOString();
+      const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0)).toISOString();
+      const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999)).toISOString();
       const res = await transactionsApi.list({ startDate: start, endDate: end, limit: 500 });
       setTransactions(res.data.data ?? res.data);
     } catch { /* silent */ } finally { setLoadingTx(false); }
