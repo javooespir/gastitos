@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, Search, Trash2, Edit2, ChevronLeft, ChevronRight, ChevronDown, CreditCard as CreditCardIcon } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2, ChevronLeft, ChevronRight, ChevronDown, CreditCard as CreditCardIcon, AlertTriangle } from 'lucide-react';
 import Header from '../components/Layout/Header';
 import TransactionForm from '../components/TransactionForm/TransactionForm';
 import { useApp } from '../context/AppContext';
@@ -21,16 +21,26 @@ interface CardGroup {
 function CreditCardGroupRows({
   group,
   onDelete,
+  onDeleteAll,
   onEdit,
   deleting
 }: {
   group: CardGroup;
   onDelete: (id: string) => void;
+  onDeleteAll: (ids: string[]) => void;
   onEdit: (tx: Transaction) => void;
   deleting: string | null;
 }) {
   const [expandARS, setExpandARS] = useState(false);
   const [expandUSD, setExpandUSD] = useState(false);
+
+  const handleDeleteAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const allIds = [...group.arsTxs, ...group.usdTxs].map(t => t.id);
+    const n = allIds.length;
+    if (!confirm(`¿Eliminar las ${n} transacciones de Tarjeta BBVA de este mes? Esta acción no se puede deshacer.`)) return;
+    onDeleteAll(allIds);
+  };
 
   return (
     <>
@@ -39,7 +49,7 @@ function CreditCardGroupRows({
         <>
           <tr
             onClick={() => setExpandARS(v => !v)}
-            className="hover:bg-white/3 cursor-pointer transition-colors border-b border-white/5"
+            className="hover:bg-white/3 cursor-pointer transition-colors border-b border-white/5 group/row"
           >
             <td className="px-6 py-3">
               <div className="flex items-center gap-2.5">
@@ -63,7 +73,16 @@ function CreditCardGroupRows({
               <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-red-500/10 text-red-400">Gasto</span>
             </td>
             <td className="px-4 py-3 text-right">
-              <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform inline ${expandARS ? 'rotate-180' : ''}`} />
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={handleDeleteAll}
+                  title="Eliminar todo el resumen"
+                  className="opacity-0 group-hover/row:opacity-100 p-1 rounded text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                </button>
+                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${expandARS ? 'rotate-180' : ''}`} />
+              </div>
             </td>
           </tr>
           {expandARS && group.arsTxs.map(t => (
@@ -108,7 +127,7 @@ function CreditCardGroupRows({
         <>
           <tr
             onClick={() => setExpandUSD(v => !v)}
-            className="hover:bg-white/3 cursor-pointer transition-colors border-b border-white/5"
+            className="hover:bg-white/3 cursor-pointer transition-colors border-b border-white/5 group/row"
           >
             <td className="px-6 py-3">
               <div className="flex items-center gap-2.5">
@@ -132,7 +151,9 @@ function CreditCardGroupRows({
               <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-400">Gasto USD</span>
             </td>
             <td className="px-4 py-3 text-right">
-              <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform inline ${expandUSD ? 'rotate-180' : ''}`} />
+              <div className="flex items-center justify-end gap-2">
+                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${expandUSD ? 'rotate-180' : ''}`} />
+              </div>
             </td>
           </tr>
           {expandUSD && group.usdTxs.map(t => (
@@ -269,6 +290,17 @@ export default function Transactions() {
     }
   };
 
+  const handleDeleteAll = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map(id => transactionsApi.remove(id)));
+      refreshTransactions();
+      refreshSummary();
+      fetchTransactions(year, month);
+    } catch {
+      alert('Error al eliminar el resumen');
+    }
+  };
+
   const handleEdit = (tx: Transaction) => {
     setEditingTx(tx);
     setShowForm(true);
@@ -378,6 +410,7 @@ export default function Transactions() {
                       <CreditCardGroupRows
                         group={cardGroup}
                         onDelete={handleDelete}
+                        onDeleteAll={handleDeleteAll}
                         onEdit={handleEdit}
                         deleting={deleting}
                       />

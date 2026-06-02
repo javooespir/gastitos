@@ -3,10 +3,11 @@ import { TransactionInput, TransactionFilters } from '../types';
 import { getExchangeRates, arsToUsd } from './exchangeService';
 
 export async function createTransaction(input: TransactionInput) {
-  // If montoUSD is explicitly provided (fixed at time of entry), use it.
-  // Only fall back to live rate if not provided.
+  // If montoUSD is explicitly provided (even as 0), use it as-is.
+  // 0 means "ARS-only transaction" (e.g. credit card ARS import).
+  // Only fall back to live rate if montoUSD is absent (undefined/null).
   let montoUSD: number;
-  if (input.montoUSD !== undefined && input.montoUSD > 0) {
+  if (input.montoUSD !== undefined && input.montoUSD !== null) {
     montoUSD = input.montoUSD;
   } else {
     const { blue } = await getExchangeRates();
@@ -64,8 +65,8 @@ export async function updateTransaction(id: string, input: Partial<TransactionIn
 
   let montoUSD = existing.montoUSD;
   if (input.montoARS !== undefined) {
-    if (input.montoUSD !== undefined && input.montoUSD > 0) {
-      // Use explicitly provided value (fixed at time of edit)
+    if (input.montoUSD !== undefined && input.montoUSD !== null) {
+      // Use explicitly provided value (even 0 = ARS-only transaction)
       montoUSD = input.montoUSD;
     } else {
       const { blue } = await getExchangeRates();

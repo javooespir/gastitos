@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Upload, FileText, Check, X, AlertCircle, CreditCard as CreditCardIcon, Loader2, Pencil, ChevronDown, History } from 'lucide-react';
+import { Upload, FileText, Check, X, AlertCircle, CreditCard as CreditCardIcon, Loader2, Pencil, ChevronDown, History, AlertTriangle } from 'lucide-react';
 import Header from '../components/Layout/Header';
 import { creditCardApi, transactionsApi } from '../api/client';
 import { CATEGORIES, Transaction } from '../types';
@@ -87,6 +87,7 @@ function CardHistoryGroup({
   const [expandARS, setExpandARS] = useState(false);
   const [expandUSD, setExpandUSD] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const handleDelete = async (id: string) => {
     if (!confirm('¿Eliminar esta transacción?')) return;
@@ -97,29 +98,51 @@ function CardHistoryGroup({
     } catch { alert('Error al eliminar'); } finally { setDeletingId(null); }
   };
 
+  const handleDeleteAll = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const allIds = [...group.arsTxs, ...group.usdTxs].map(t => t.id);
+    const n = allIds.length;
+    if (!confirm(`¿Eliminar todo el resumen de ${group.label}? (${n} transacciones)\nEsta acción no se puede deshacer.`)) return;
+    setDeletingAll(true);
+    try {
+      await Promise.all(allIds.map(id => transactionsApi.remove(id)));
+      onRefresh();
+    } catch { alert('Error al eliminar el resumen'); } finally { setDeletingAll(false); }
+  };
+
   return (
     <div className="border-b border-white/5 last:border-0">
       {/* ARS row */}
       {group.arsTotal > 0 && (
         <>
-          <button
-            onClick={() => setExpandARS(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/3 transition-colors text-left"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                <CreditCardIcon className="w-4 h-4 text-red-400" />
+          <div className="flex items-center group/row">
+            <button
+              onClick={() => setExpandARS(v => !v)}
+              className="flex-1 flex items-center justify-between px-5 py-3.5 hover:bg-white/3 transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <CreditCardIcon className="w-4 h-4 text-red-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-white font-medium capitalize">Resumen {group.label} · Pesos</p>
+                  <p className="text-xs text-slate-500">{group.arsTxs.length} movimientos</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-white font-medium capitalize">Resumen {group.label} · Pesos</p>
-                <p className="text-xs text-slate-500">{group.arsTxs.length} movimientos</p>
+              <div className="flex items-center gap-3">
+                <span className="text-red-400 font-mono text-sm font-semibold">-{formatARS(group.arsTotal)}</span>
+                <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform flex-shrink-0 ${expandARS ? 'rotate-180' : ''}`} />
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-red-400 font-mono text-sm font-semibold">-{formatARS(group.arsTotal)}</span>
-              <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform flex-shrink-0 ${expandARS ? 'rotate-180' : ''}`} />
-            </div>
-          </button>
+            </button>
+            <button
+              onClick={handleDeleteAll}
+              disabled={deletingAll}
+              title="Eliminar todo el resumen"
+              className="opacity-0 group-hover/row:opacity-100 mx-3 p-2 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-50"
+            >
+              {deletingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+            </button>
+          </div>
           {expandARS && (
             <div className="bg-white/2 border-t border-white/5 divide-y divide-white/5">
               {group.arsTxs.map(t => (
