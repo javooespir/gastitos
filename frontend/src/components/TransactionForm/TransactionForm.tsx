@@ -131,8 +131,13 @@ export default function TransactionForm({ onClose, onSuccess, editTransaction }:
 
     setSaving(true);
     try {
+      // Calculate both amounts using the rate currently shown in the form.
+      // montoUSD is sent explicitly so the backend stores it fixed — never recalculates later.
       const montoARS = isAhorroUSD ? Math.round(montoRaw * rate) : montoRaw;
-      const payload: any = { ...form, montoARS };
+      const montoUSD = isAhorroUSD
+        ? montoRaw                          // user entered USD directly
+        : rate > 0 ? montoRaw / rate : 0;  // convert ARS → USD at today's rate
+      const payload: any = { ...form, montoARS, montoUSD };
 
       let desc = form.descripcion || '';
       if (esSaldoPrevio) desc = `[Saldo previo] ${desc}`.trim();

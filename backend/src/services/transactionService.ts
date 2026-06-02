@@ -3,8 +3,15 @@ import { TransactionInput, TransactionFilters } from '../types';
 import { getExchangeRates, arsToUsd } from './exchangeService';
 
 export async function createTransaction(input: TransactionInput) {
-  const { blue } = await getExchangeRates();
-  const montoUSD = arsToUsd(input.montoARS, blue);
+  // If montoUSD is explicitly provided (fixed at time of entry), use it.
+  // Only fall back to live rate if not provided.
+  let montoUSD: number;
+  if (input.montoUSD !== undefined && input.montoUSD > 0) {
+    montoUSD = input.montoUSD;
+  } else {
+    const { blue } = await getExchangeRates();
+    montoUSD = arsToUsd(input.montoARS, blue);
+  }
 
   return prisma.transaction.create({
     data: {
@@ -57,8 +64,13 @@ export async function updateTransaction(id: string, input: Partial<TransactionIn
 
   let montoUSD = existing.montoUSD;
   if (input.montoARS !== undefined) {
-    const { blue } = await getExchangeRates();
-    montoUSD = arsToUsd(input.montoARS, blue);
+    if (input.montoUSD !== undefined && input.montoUSD > 0) {
+      // Use explicitly provided value (fixed at time of edit)
+      montoUSD = input.montoUSD;
+    } else {
+      const { blue } = await getExchangeRates();
+      montoUSD = arsToUsd(input.montoARS, blue);
+    }
   }
 
   return prisma.transaction.update({

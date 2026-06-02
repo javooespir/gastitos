@@ -2,6 +2,7 @@ export interface TransactionInput {
   fecha?: string;
   categoria: string;
   montoARS: number;
+  montoUSD?: number; // if provided, stored as-is (fixed at entry time). If omitted, backend calculates from live rate.
   tipo: 'gasto' | 'ingreso' | 'inversion' | 'ahorro';
   descripcion?: string;
   cuenta?: string;
