@@ -10,44 +10,101 @@ async function parsePdfBuffer(buffer: Buffer): Promise<string> {
   return data.text;
 }
 
+/** Parse Argentine number format: "1.234.567,89" → 1234567.89 */
+function parseARSNumber(s: string): number {
+  return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+}
+
+/**
+ * Extract total taxes directly from PDF text using regex — more reliable than AI for this.
+ * BBVA has "Impuestos, cargos e intereses" section(s) with dated lines followed by peso amounts.
+ * Returns { totalPesos, fecha } or null if section not found.
+ */
+function extractTaxesFromText(text: string): { totalPesos: number; fecha: string } | null {
+  // Find every occurrence of "Impuestos" section up to "SALDO ACTUAL"
+  const taxSectionRegex = /Impuestos[,\s]+cargos\s+e\s+intereses([\s\S]*?)(?=SALDO\s+ACTUAL|TOTAL\s+CONSUMOS|Consumos\s+[A-Z])/gi;
+  let totalPesos = 0;
+  let lastDate = '';
+  let foundAny = false;
+
+  let m: RegExpExecArray | null;
+  while ((m = taxSectionRegex.exec(text)) !== null) {
+    const section = m[1];
+    foundAny = true;
+
+    // Extract date from lines like "28-May-26" or "28/05/26"
+    const dateMatch = section.match(/(\d{2}[-/][A-Za-z]{3}[-/]\d{2,4}|\d{2}\/\d{2}\/\d{4})/);
+    if (dateMatch && !lastDate) lastDate = dateMatch[1];
+
+    // Match peso amounts: numbers like "18.044,05" or "235,36" or "16.475,40"
+    // We want numbers that appear in the PESOS column (not the DÓLARES column which has small values)
+    // Strategy: find all Argentine-format numbers and filter out tiny ones (likely USD amounts < 200)
+    const amountRegex = /(\d{1,3}(?:\.\d{3})*,\d{2})/g;
+    let a: RegExpExecArray | null;
+    while ((a = amountRegex.exec(section)) !== null) {
+      const val = parseARSNumber(a[1]);
+      // DÓLARES column amounts are small (< 200); PESOS column amounts are large.
+      // Filter out any value that appears to be from the DÓLARES column or is a base for calc
+      // Skip if value looks like a calculation base (appears in parentheses in description)
+      const surrounding = section.substring(Math.max(0, a.index - 30), a.index + 15);
+      const inParentheses = /\(\s*[\d.,]+\s*\)/.test(surrounding.substring(0, 30));
+      if (!inParentheses && val >= 50) {
+        totalPesos += val;
+      }
+    }
+  }
+
+  if (!foundAny || totalPesos === 0) return null;
+
+  // Convert date to YYYY-MM-DD
+  let fechaISO = new Date().toISOString().split('T')[0];
+  if (lastDate) {
+    const monthMap: Record<string, string> = {
+      'ene': '01', 'feb': '02', 'mar': '03', 'abr': '04', 'may': '05', 'jun': '06',
+      'jul': '07', 'ago': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dic': '12'
+    };
+    const parts = lastDate.match(/(\d{2})[-/]([A-Za-z]{3})[-/](\d{2,4})/);
+    if (parts) {
+      const day = parts[1];
+      const mon = monthMap[parts[2].toLowerCase()] || '01';
+      const yr = parts[3].length === 2 ? `20${parts[3]}` : parts[3];
+      fechaISO = `${yr}-${mon}-${day}`;
+    }
+  }
+
+  return { totalPesos, fecha: fechaISO };
+}
+
 async function extractTransactionsWithGroq(pdfText: string, banco: string): Promise<any[]> {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error('GROQ_API_KEY no configurada');
 
-  const systemPrompt = `Sos un experto en analizar resúmenes de tarjetas de crédito de ${banco} Argentina.
-Tu tarea es extraer TODAS las transacciones de consumo Y los impuestos/cargos del texto y devolver un JSON array.
+  // Use full text — Groq llama-3.3-70b has large context window
+  const textToSend = pdfText.length > 25000 ? pdfText.substring(0, 25000) : pdfText;
 
-Cada item debe tener EXACTAMENTE este formato:
+  const systemPrompt = `Sos un experto en analizar resúmenes de tarjetas de crédito de ${banco} Argentina.
+Tu tarea es extraer ÚNICAMENTE los CONSUMOS (compras) del texto. Los impuestos se calculan por separado, NO los incluyas.
+
+Devolvé un JSON array donde cada item tiene EXACTAMENTE este formato:
 {"fecha": "YYYY-MM-DD", "descripcion": "nombre del comercio", "monto": 1234.56, "moneda": "ARS", "cuotas": null, "titular": "ESPIR"}
 
-REGLAS CRÍTICAS:
+REGLAS:
+- fecha: convertí "07-May-26" → "2026-05-07", "10-Abr-26" → "2026-04-10"
+- descripcion: nombre limpio del comercio. Sin códigos, sin autorizaciones, sin "NRO.CUPÓN".
+  "APPLE.COM BILL MN7Q0FD2SUSD 1,99" → "Apple"
+  "MERPAGO*SHELL 000001" → "Shell"
+  "AUTOPISTAS URBAN 000000006024318" → "Autopistas Urban"
+  "CIA SEG LA MER5168317330101-000-000" → "CIA SEG LA MER"
+- moneda: BBVA tiene columna PESOS y columna DÓLARES:
+  * Valor en PESOS → moneda: "ARS"
+  * Valor en DÓLARES (o descripción dice "USD X,XX") → moneda: "USD", monto en dólares
+- cuotas: "C.01/06" → "1/6", pago único → null
+- titular: apellido del titular de la sección ("ESPIR", "CEJAS", "MARQUEZ")
+- Incluí consumos de TODOS los titulares
+- Los montos usan punto como miles y coma como decimal: "33.419,67" → 33419.67
+- IGNORÁ: sección "Impuestos, cargos e intereses", pagos (SU PAGO EN PESOS/USD), créditos/devoluciones, cuotas a vencer
 
-1. CONSUMOS: Extraé cada compra individual de todas las secciones "Consumos NOMBRE":
-   - descripcion: solo el nombre del comercio/servicio, limpio. Sin códigos de autorización, sin NRO de cupón.
-     Ejemplos: "APPLE.COM BILL MN7Q0FD2SUSD 1,99" → "Apple", "MERPAGO*SHELL" → "Shell", "AUTOPISTAS URBAN 000000006024318" → "Autopistas Urban", "CIA SEG LA MER5168317330101-000-000" → "CIA SEG LA MER"
-   - moneda y monto CRÍTICO - BBVA tiene columna PESOS y columna DÓLARES:
-     * Monto en columna PESOS → moneda: "ARS", usar ese valor
-     * Monto en columna DÓLARES, O descripción termina en "USD X,XX" → moneda: "USD", usar el valor en dólares
-   - cuotas: "C.01/06" → "1/6", "C.02/03" → "2/3", pago único → null
-   - titular: apellido del titular de la sección (ej: "ESPIR", "CEJAS", "MARQUEZ")
-
-2. IMPUESTOS Y CARGOS: Buscá la sección "Impuestos, cargos e intereses".
-   - Sumá TODOS los montos en PESOS de esa sección en UNA SOLA transacción:
-     * descripcion: "Impuestos y cargos tarjeta"
-     * monto: suma total de todos los ítems de esa sección (IMPUESTO DE SELLOS + INTERESES + IVA + IIBB + DB.RG, etc.)
-     * moneda: "ARS"
-     * cuotas: null
-     * titular: "ESPIR"
-     * fecha: usar la fecha de cierre del resumen (la que aparece como "CIERRE ACTUAL")
-   - Ignorá los montos en DÓLARES de esa sección.
-
-3. IGNORÁ siempre: pagos realizados (SU PAGO EN PESOS/USD), créditos/devoluciones (CR.RG), cuotas a vencer futuras.
-
-4. Los montos en el PDF usan punto como separador de miles y coma como decimal: "33.419,67" → 33419.67
-
-Devolvé SOLO el JSON array, sin texto adicional, sin markdown, sin explicaciones.`;
-
-  const userMessage = `Extraé las transacciones de este resumen de tarjeta BBVA Argentina:\n\n${pdfText.substring(0, 10000)}`;
+Devolvé SOLO el JSON array, sin markdown ni texto adicional.`;
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -59,12 +116,12 @@ Devolvé SOLO el JSON array, sin texto adicional, sin markdown, sin explicacione
       model: 'llama-3.3-70b-versatile',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
+        { role: 'user', content: `Extraé los consumos de este resumen BBVA:\n\n${textToSend}` }
       ],
-      max_tokens: 4096,
+      max_tokens: 5000,
       temperature: 0.1
     }),
-    signal: AbortSignal.timeout(30000)
+    signal: AbortSignal.timeout(45000)
   });
 
   if (!res.ok) throw new Error(`Groq error: ${res.status}`);
@@ -73,12 +130,10 @@ Devolvé SOLO el JSON array, sin texto adicional, sin markdown, sin explicacione
 
   try {
     const clean = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(clean);
-    // Normalize: ensure moneda field exists, default to ARS
-    return parsed.map((t: any) => ({
+    return JSON.parse(clean).map((t: any) => ({
       ...t,
       moneda: t.moneda === 'USD' ? 'USD' : 'ARS',
-      monto: typeof t.monto === 'number' ? t.monto : parseFloat(String(t.monto).replace(/\./g, '').replace(',', '.')),
+      monto: typeof t.monto === 'number' ? t.monto : parseARSNumber(String(t.monto)),
       titular: t.titular || 'PRINCIPAL'
     }));
   } catch {
@@ -86,7 +141,7 @@ Devolvé SOLO el JSON array, sin texto adicional, sin markdown, sin explicacione
   }
 }
 
-// POST /api/credit-card/parse — upload PDF and extract transactions
+// POST /api/credit-card/parse
 router.post('/parse', upload.single('pdf'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.file) {
@@ -102,8 +157,24 @@ router.post('/parse', upload.single('pdf'), async (req: Request, res: Response, 
       return;
     }
 
+    // Extract transactions via AI (consumos only)
     const transactions = await extractTransactionsWithGroq(pdfText, banco);
-    res.json({ transactions, rawTextLength: pdfText.length });
+
+    // Extract taxes via regex (reliable, not AI-dependent)
+    const taxes = extractTaxesFromText(pdfText);
+    if (taxes && taxes.totalPesos > 0) {
+      transactions.push({
+        fecha: taxes.fecha,
+        descripcion: 'Impuestos y cargos tarjeta',
+        monto: Math.round(taxes.totalPesos * 100) / 100,
+        moneda: 'ARS',
+        cuotas: null,
+        titular: 'ESPIR',
+        tipo: 'gasto'
+      });
+    }
+
+    res.json({ transactions, rawTextLength: pdfText.length, taxesExtracted: taxes });
   } catch (err) {
     next(err);
   }

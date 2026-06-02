@@ -13,7 +13,8 @@ export const transactionsApi = {
   remove: (id: string) => api.delete(`/transactions/${id}`),
   monthlySummary: (year?: number, month?: number) =>
     api.get('/transactions/summary/monthly', { params: { year, month } }),
-  history: () => api.get('/transactions/summary/history')
+  history: () => api.get('/transactions/summary/history'),
+  totals: () => api.get('/transactions/summary/totals')
 };
 
 // Goals

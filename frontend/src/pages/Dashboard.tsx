@@ -10,6 +10,15 @@ import { transactionsApi } from '../api/client';
 import { formatARS, formatUSD, formatRelative } from '../utils/formatters';
 import { CATEGORY_COLORS, MonthlySummary } from '../types';
 
+interface SavingsTotals {
+  totalAhorroARS: number;
+  totalAhorroUSD: number;
+  totalInversionARS: number;
+  totalInversionUSD: number;
+  countAhorro: number;
+  countInversion: number;
+}
+
 const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 function StatCard({ label, ars, usd, icon: Icon, color }: {
@@ -40,7 +49,7 @@ function StatCard({ label, ars, usd, icon: Icon, color }: {
 }
 
 export default function Dashboard() {
-  const { history, transactions, insights, fixedExpenses, loans, goals, refreshTransactions, refreshSummary } = useApp();
+  const { history, transactions, insights, fixedExpenses, loans, refreshTransactions, refreshSummary } = useApp();
   const [showForm, setShowForm] = useState(false);
 
   // Month navigator — own local state so it doesn't affect AppContext
@@ -49,6 +58,7 @@ export default function Dashboard() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
+  const [savingsTotals, setSavingsTotals] = useState<SavingsTotals | null>(null);
 
   const fetchSummary = useCallback(async (y: number, m: number) => {
     setLoadingSummary(true);
@@ -60,7 +70,15 @@ export default function Dashboard() {
     }
   }, []);
 
+  const fetchTotals = useCallback(async () => {
+    try {
+      const res = await transactionsApi.totals();
+      setSavingsTotals(res.data);
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => { fetchSummary(year, month); }, [year, month, fetchSummary]);
+  useEffect(() => { fetchTotals(); }, [fetchTotals]);
 
   const prevMonth = () => {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
@@ -76,6 +94,7 @@ export default function Dashboard() {
     refreshTransactions();
     refreshSummary();
     fetchSummary(year, month);
+    fetchTotals();
   };
 
   const recent = transactions.slice(0, 8);
@@ -84,11 +103,6 @@ export default function Dashboard() {
   const fixedPendiente = fixedExpenses.filter(e => !e.pagadoEsteMes).reduce((s, e) => s + e.monto, 0);
   const fixedPendienteCount = fixedExpenses.filter(e => !e.pagadoEsteMes).length;
   const totalCuotasCreditos = loans.filter(l => l.estado === 'activo').reduce((s, l) => s + l.montoCuotaActual, 0);
-
-  // Total acumulado en metas
-  const totalAhorradoMetas = goals.reduce((s, g) => s + (g.ahorroTotalUSD ?? g.ahorroActualUSD), 0);
-  const totalObjetivoMetas = goals.reduce((s, g) => s + g.montoObjetivoUSD, 0);
-  const pctMetas = totalObjetivoMetas > 0 ? Math.min(100, Math.round((totalAhorradoMetas / totalObjetivoMetas) * 100)) : 0;
 
   return (
     <>
@@ -131,31 +145,43 @@ export default function Dashboard() {
             icon={TrendingUp} color="purple" />
         </div>
 
-        {/* Total savings across goals */}
-        {goals.length > 0 && (
+        {/* Total accumulated savings (all-time, all months) */}
+        {savingsTotals !== null && (savingsTotals.totalAhorroARS > 0 || savingsTotals.totalAhorroUSD > 0 || savingsTotals.totalInversionUSD > 0) && (
           <div className="bg-surface-850 border border-blue-500/15 rounded-2xl p-5">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center justify-between gap-6 flex-wrap">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center">
                   <Wallet className="w-4 h-4 text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Ahorro acumulado en metas</p>
-                  <p className="text-xl font-bold font-mono text-blue-400">{formatUSD(totalAhorradoMetas)}</p>
+                  <p className="text-xs text-slate-400 mb-0.5">Ahorro disponible total</p>
+                  <p className="text-xs text-slate-500">Suma acumulada de todos los meses</p>
                 </div>
               </div>
-              <div className="flex-1 min-w-[120px]">
-                <div className="flex justify-between text-xs text-slate-500 mb-1.5">
-                  <span>{pctMetas}% del objetivo</span>
-                  <span>{formatUSD(totalObjetivoMetas)}</span>
-                </div>
-                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${pctMetas}%` }} />
-                </div>
-                <p className="text-xs text-slate-600 mt-1">{goals.length} meta{goals.length !== 1 ? 's' : ''} activa{goals.length !== 1 ? 's' : ''}</p>
+              <div className="flex items-center gap-6 flex-wrap">
+                {savingsTotals.totalAhorroARS > 0 && (
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500 mb-0.5">Ahorros en pesos</p>
+                    <p className="text-lg font-bold font-mono text-blue-400">{formatARS(savingsTotals.totalAhorroARS)}</p>
+                    <p className="text-xs text-slate-600">{savingsTotals.countAhorro} transacciones</p>
+                  </div>
+                )}
+                {savingsTotals.totalAhorroUSD > 0 && (
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500 mb-0.5">Ahorros en USD</p>
+                    <p className="text-lg font-bold font-mono text-emerald-400">{formatUSD(savingsTotals.totalAhorroUSD)}</p>
+                  </div>
+                )}
+                {savingsTotals.totalInversionUSD > 0 && (
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500 mb-0.5">Inversiones USD</p>
+                    <p className="text-lg font-bold font-mono text-purple-400">{formatUSD(savingsTotals.totalInversionUSD)}</p>
+                    <p className="text-xs text-slate-600">{savingsTotals.countInversion} transacciones</p>
+                  </div>
+                )}
               </div>
-              <Link to="/goals" className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors flex-shrink-0">
-                Ver metas <ArrowRight className="w-3 h-3" />
+              <Link to="/transactions" className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors flex-shrink-0">
+                Ver todas <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
           </div>

@@ -75,6 +75,34 @@ router.get('/summary/history', async (_req: Request, res: Response, next: NextFu
   }
 });
 
+// All-time savings totals (not monthly — cumulative)
+router.get('/summary/totals', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const [ahorro, inversion] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { tipo: 'ahorro' },
+        _sum: { montoARS: true, montoUSD: true },
+        _count: true
+      }),
+      prisma.transaction.aggregate({
+        where: { tipo: 'inversion' },
+        _sum: { montoARS: true, montoUSD: true },
+        _count: true
+      })
+    ]);
+    res.json({
+      totalAhorroARS: ahorro._sum.montoARS ?? 0,
+      totalAhorroUSD: ahorro._sum.montoUSD ?? 0,
+      countAhorro: ahorro._count,
+      totalInversionARS: inversion._sum.montoARS ?? 0,
+      totalInversionUSD: inversion._sum.montoUSD ?? 0,
+      countInversion: inversion._count
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const transaction = await updateTransaction(req.params['id'] as string, req.body);
